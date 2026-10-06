@@ -1,17 +1,15 @@
 /**
- * ExamAI Pipeline - Step 3: Multi-Provider Search & Source Deduplication
- * Executes parallel searches across angles and deduplicates retrieved sources.
+ * ExamAssist AI - Multi-Provider Web Search & Deduplication
+ * Supports Tavily, Serper, and Brave Search APIs with unified environment configuration.
+ * Never fabricates or injects fake fallback sources.
  */
 
 function normalizeUrl(url) {
   try {
     const parsed = new URL(url);
-    // Remove analytics and tracking query parameters
-    const paramsToRemove = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "ref", "fbclid"];
-    paramsToRemove.forEach(p => parsed.searchParams.delete(p));
-    // Remove hash
+    const tracking = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "ref", "fbclid", "gclid"];
+    tracking.forEach(p => parsed.searchParams.delete(p));
     parsed.hash = "";
-    // Normalize hostname
     parsed.hostname = parsed.hostname.toLowerCase().replace(/^www\./, "");
     let clean = parsed.toString();
     if (clean.endsWith("/") && parsed.pathname === "/") {
@@ -32,19 +30,48 @@ function extractDomain(url) {
   }
 }
 
+let mockSearchHandler = null;
+
+export function setMockSearchHandler(fn) {
+  mockSearchHandler = fn;
+}
+
+export function getMockSearchHandler() {
+  return mockSearchHandler;
+}
+
+export function getActiveSearchProvider() {
+  if (mockSearchHandler) return "mock";
+
+  const tavily = process.env.TAVILY_API_KEY;
+  if (tavily && tavily !== "replace_me" && tavily.trim()) return "tavily";
+
+  const serper = process.env.SERPER_API_KEY;
+  if (serper && serper !== "replace_me" && serper.trim()) return "serper";
+
+  const brave = process.env.BRAVE_SEARCH_API_KEY || process.env.BRAVE_API_KEY;
+  if (brave && brave !== "replace_me" && brave.trim()) return "brave";
+
+  return "none";
+}
+
+export function hasSearchApiKey() {
+  return getActiveSearchProvider() !== "none";
+}
+
 /**
- * Searches Wikipedia's public OpenSearch API (requires no auth, ideal for foundational definitions)
+ * Searches Wikipedia OpenSearch API (public, no key required, for definitions/concepts)
  */
-async function searchWikipedia(query) {
+export async function searchWikipedia(query) {
   try {
     const endpoint = `https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(query)}&limit=3&namespace=0&format=json`;
     const res = await fetch(endpoint, {
-      headers: { "User-Agent": "ExamAI-Study-Assistant/1.0" },
+      headers: { "User-Agent": "ExamAssist-AI/2.1 (Academic Study Copilot)" },
       signal: AbortSignal.timeout(4000)
     });
     if (!res.ok) return [];
     const data = await res.json();
-    const [searchTerm, titles, snippets, urls] = data;
+    const [, titles, snippets, urls] = data;
     const results = [];
     if (Array.isArray(titles)) {
       for (let i = 0; i < titles.length; i++) {
@@ -52,7 +79,7 @@ async function searchWikipedia(query) {
           results.push({
             title: titles[i],
             url: urls[i],
-            snippet: snippets[i] || `Overview of ${titles[i]} on Wikipedia Encyclopedia.`,
+            snippet: snippets[i] || `Overview of ${titles[i]} on Wikipedia.`,
             domain: "en.wikipedia.org",
             provider: "wikipedia"
           });
@@ -66,32 +93,7 @@ async function searchWikipedia(query) {
 }
 
 /**
- * Searches CrossRef's public bibliographic API for academic and DOI sources
- */
-async function searchCrossRef(query) {
-  try {
-    const endpoint = `https://api.crossref.org/works?query=${encodeURIComponent(query)}&rows=3`;
-    const res = await fetch(endpoint, {
-      headers: { "User-Agent": "ExamAI-Study-Assistant/1.0 (mailto:academic-assistant@examai.local)" },
-      signal: AbortSignal.timeout(4000)
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    const items = data?.message?.items || [];
-    return items.map(item => ({
-      title: item.title?.[0] || "Academic Publication",
-      url: item.URL || (item.DOI ? `https://doi.org/${item.DOI}` : ""),
-      snippet: `Published in ${item["container-title"]?.[0] || "Scholarly Journal"} (${item.created?.["date-parts"]?.[0]?.[0] || "Recent"}). Authors: ${item.author?.map(a => a.family).slice(0, 3).join(", ") || "Academic research team"}.`,
-      domain: item.URL ? extractDomain(item.URL) : "doi.org",
-      provider: "crossref"
-    })).filter(s => Boolean(s.url));
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Searches Tavily API if configured
+ * Searches Tavily API
  */
 async function searchTavily(query, apiKey) {
   try {
@@ -122,7 +124,7 @@ async function searchTavily(query, apiKey) {
 }
 
 /**
- * Searches Serper / Google API if configured
+ * Searches Serper (Google API)
  */
 async function searchSerper(query, apiKey) {
   try {
@@ -150,37 +152,34 @@ async function searchSerper(query, apiKey) {
 }
 
 /**
- * Executes a single search query against active providers
+ * Searches Brave Search API
  */
-async function executeSingleQuery(queryObj) {
-  const query = queryObj.query || queryObj;
-  const tavilyKey = process.env.TAVILY_API_KEY;
-  const serperKey = process.env.SERPER_API_KEY;
-
-  const searchPromises = [];
-
-  if (tavilyKey && tavilyKey !== "replace_me") {
-    searchPromises.push(searchTavily(query, tavilyKey));
-  } else if (serperKey && serperKey !== "replace_me") {
-    searchPromises.push(searchSerper(query, serperKey));
+async function searchBrave(query, apiKey) {
+  try {
+    const endpoint = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=4`;
+    const res = await fetch(endpoint, {
+      headers: {
+        "X-Subscription-Token": apiKey,
+        "Accept": "application/json"
+      },
+      signal: AbortSignal.timeout(5000)
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.web?.results || []).map(r => ({
+      title: r.title,
+      url: r.url,
+      snippet: r.description,
+      domain: extractDomain(r.url),
+      provider: "brave"
+    }));
+  } catch {
+    return [];
   }
-
-  // Always supplement with open public academic endpoints
-  searchPromises.push(searchWikipedia(query));
-  searchPromises.push(searchCrossRef(query));
-
-  const results = await Promise.allSettled(searchPromises);
-  const flattened = [];
-  for (const r of results) {
-    if (r.status === "fulfilled" && Array.isArray(r.value)) {
-      flattened.push(...r.value);
-    }
-  }
-  return flattened;
 }
 
 /**
- * Deduplicates retrieved sources by canonical URL and title similarity
+ * Deduplicates retrieved sources by canonical URL and title
  */
 export function deduplicateSources(sourcesList, maxSources = 8) {
   const seenUrls = new Set();
@@ -204,7 +203,9 @@ export function deduplicateSources(sourcesList, maxSources = 8) {
       url: normUrl,
       snippet: (src.snippet || "").trim(),
       domain: src.domain || extractDomain(src.url),
-      provider: src.provider || "retriever"
+      provider: src.provider || "retriever",
+      authority: src.authority,
+      relevance: src.relevance
     });
 
     if (deduplicated.length >= maxSources) break;
@@ -214,35 +215,54 @@ export function deduplicateSources(sourcesList, maxSources = 8) {
 }
 
 /**
- * Coordinates parallel multi-angle searches and deduplication
+ * Executes a single search query against active configured provider
  */
-export async function executeParallelSearches(queries, maxSources = 8) {
-  const searchPromises = queries.map(q => executeSingleQuery(q));
+export async function executeSingleQuery(queryObj, { isDefinitional = false } = {}) {
+  const query = typeof queryObj === "string" ? queryObj : (queryObj.query || "");
+  if (!query) return [];
+
+  if (mockSearchHandler) {
+    try {
+      const mockResults = await mockSearchHandler(query);
+      if (Array.isArray(mockResults)) return mockResults;
+    } catch {}
+  }
+
+  const provider = getActiveSearchProvider();
+  const searchPromises = [];
+
+  if (provider === "tavily") {
+    searchPromises.push(searchTavily(query, process.env.TAVILY_API_KEY));
+  } else if (provider === "serper") {
+    searchPromises.push(searchSerper(query, process.env.SERPER_API_KEY));
+  } else if (provider === "brave") {
+    const braveKey = process.env.BRAVE_SEARCH_API_KEY || process.env.BRAVE_API_KEY;
+    searchPromises.push(searchBrave(query, braveKey));
+  }
+
+  // If definitional or no search key, Wikipedia provides foundational definitions
+  if (isDefinitional || provider === "none") {
+    searchPromises.push(searchWikipedia(query));
+  }
+
+  const results = await Promise.allSettled(searchPromises);
+  const flattened = [];
+  for (const r of results) {
+    if (r.status === "fulfilled" && Array.isArray(r.value)) {
+      flattened.push(...r.value);
+    }
+  }
+  return flattened;
+}
+
+/**
+ * Coordinates parallel multi-angle searches and deduplication.
+ * Returns empty array if no genuine sources are found (never fabricates fallbacks).
+ */
+export async function executeParallelSearches(queries, maxSources = 8, { isDefinitional = false } = {}) {
+  const searchPromises = queries.map(q => executeSingleQuery(q, { isDefinitional }));
   const rawResultsPerQuery = await Promise.all(searchPromises);
   const allSources = rawResultsPerQuery.flat();
 
-  const deduped = deduplicateSources(allSources, maxSources);
-
-  // If no external results could be fetched (e.g. offline / disconnected test environment),
-  // provide a verifiable default reference list rather than crashing.
-  if (deduped.length === 0) {
-    return [
-      {
-        title: "Stanford Encyclopedia of Philosophy / Academic Open Archives",
-        url: "https://plato.stanford.edu",
-        snippet: "Peer-reviewed academic reference and comprehensive scholarly survey.",
-        domain: "plato.stanford.edu",
-        provider: "archive"
-      },
-      {
-        title: "National Center for Biotechnology Information (NCBI) / NIH",
-        url: "https://pubmed.ncbi.nlm.nih.gov",
-        snippet: "Official peer-reviewed medical and scientific literature database.",
-        domain: "ncbi.nlm.nih.gov",
-        provider: "archive"
-      }
-    ];
-  }
-
-  return deduped;
+  return deduplicateSources(allSources, maxSources);
 }

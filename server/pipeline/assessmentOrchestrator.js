@@ -1,7 +1,11 @@
 /**
  * ExamAssist AI - Master Assessment Orchestrator
- * Coordinates question classification, multi-angle search, evidence extraction,
- * specialized reasoning, verification pass, and confidence calculation.
+ * Coordinates:
+ * 1. Question Classification & Context Extraction
+ * 2. Multi-Angle Search (relevance-first, skipped for pure math/code)
+ * 3. Solve-Before-Searching Reasoning (first principles -> evidence -> tie-break)
+ * 4. Verification Pass & Contradiction Detection (strict UNVERIFIED if unverified)
+ * 5. Calibrated Confidence (LOWER of model confidence and confidence engine)
  */
 
 import { classifyQuestion } from "./classifier.js";
@@ -12,6 +16,21 @@ import { computeConfidence } from "./confidenceEngine.js";
 import { defaultAIClient } from "../aiClient.js";
 import { logger } from "../logger.js";
 
+const CONFIDENCE_RANKS = {
+  UNVERIFIED: 0,
+  LOW: 1,
+  MEDIUM: 2,
+  HIGH: 3
+};
+
+function pickLowerConfidence(confA, confB) {
+  const normA = (confA || "UNVERIFIED").toUpperCase();
+  const normB = (confB || "UNVERIFIED").toUpperCase();
+  const rankA = CONFIDENCE_RANKS[normA] !== undefined ? CONFIDENCE_RANKS[normA] : 0;
+  const rankB = CONFIDENCE_RANKS[normB] !== undefined ? CONFIDENCE_RANKS[normB] : 0;
+  return rankA <= rankB ? normA : normB;
+}
+
 export async function processAssessmentQuestion({
   question,
   text,
@@ -20,9 +39,9 @@ export async function processAssessmentQuestion({
   questionType: qTypeParam,
   context = "",
   subject: subjectOverride,
-  codeSnippet,
-  tableData,
-  mathFormula,
+  codeSnippet = "",
+  tableData = "",
+  mathFormula = "",
   maxSources = 5,
   mode = "Practice Mode",
   aiClient = defaultAIClient
@@ -58,14 +77,14 @@ export async function processAssessmentQuestion({
     difficulty: classification.difficulty
   });
 
-  // 2. Multi-Angle Search Orchestration
+  // 2. Multi-Angle Search Orchestration (Priority 3: relevance-first, skipped for pure math/code)
   let sources = [];
   if (classification.webSearchNeeded) {
     const queries = await generateSearchQueries(classification.rawQuestion, classification.subject, aiClient);
-    sources = await orchestrateSearch(queries, maxSources, classification.rawQuestion);
+    sources = await orchestrateSearch(queries, maxSources, classification.rawQuestion, classification.questionType);
   }
 
-  // 3. Specialized Reasoning Draft
+  // 3. Specialized Reasoning (Solve before search, mathjs/sandbox, option integrity)
   const reasonedOutput = await generateReasonedAnswer({
     question: classification.rawQuestion,
     questionType: classification.questionType,
@@ -73,6 +92,8 @@ export async function processAssessmentQuestion({
     topic: classification.topic,
     options: classification.options,
     sources,
+    codeSnippet,
+    mathFormula,
     aiClient
   });
 
@@ -85,8 +106,8 @@ export async function processAssessmentQuestion({
     aiClient
   });
 
-  // 5. Confidence Engine
-  const { confidence, confidenceReason } = computeConfidence({
+  // 5. Confidence Engine Calibration
+  const engineResult = computeConfidence({
     verificationStatus: verification.status,
     sources,
     hasContradiction: verification.hasContradiction,
@@ -94,15 +115,25 @@ export async function processAssessmentQuestion({
     questionType: classification.questionType
   });
 
+  // Priority 1 point 4: Compute final confidence as the LOWER of engine confidence and model confidence. Never default to HIGH.
+  const finalConfidence = pickLowerConfidence(engineResult.confidence, reasonedOutput.confidence);
+  let finalConfidenceReason = engineResult.confidenceReason;
+  if (finalConfidence === (reasonedOutput.confidence || "").toUpperCase() && reasonedOutput.confidenceReason) {
+    finalConfidenceReason = reasonedOutput.confidenceReason;
+  }
+  if (verification.status === "UNVERIFIED" || sources.length === 0) {
+    finalConfidenceReason = "Evidence is unverified or unavailable; independent verification required.";
+  }
+
   const latencyMs = Date.now() - startTime;
   logger.info("Assessment processed", {
     questionType: classification.questionType,
-    confidence,
+    confidence: finalConfidence,
     sourcesCount: sources.length,
     latencyMs
   });
 
-  // 6. Assemble Exact Standard Response
+  // 6. Return Structured Assessment Response
   return {
     question: classification.rawQuestion,
     questionType: classification.questionType,
@@ -112,8 +143,8 @@ export async function processAssessmentQuestion({
     directAnswer: reasonedOutput.directAnswer,
     questionRestated: reasonedOutput.questionRestated,
     ownSolution: reasonedOutput.ownSolution,
-    confidence: reasonedOutput.confidence || confidence,
-    confidenceReason: reasonedOutput.confidenceReason || confidenceReason,
+    confidence: finalConfidence,
+    confidenceReason: finalConfidenceReason,
     explanation: reasonedOutput.explanation,
     reasoningSteps: reasonedOutput.reasoningSteps,
     optionAnalysis: reasonedOutput.optionAnalysis,

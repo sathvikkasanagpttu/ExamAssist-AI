@@ -20,10 +20,10 @@ window.ExamAssist.GenericExtractor = class GenericExtractor extends window.ExamA
     let options = [];
 
     // Check if options are already embedded in the selected text
-    const textOptions = [...raw.matchAll(/(?:^|\n|\s+)(?:\(?([A-Ea-e1-5])[\).:\-]\s+)([^\n\r]+)/g)];
+    const textOptions = [...raw.matchAll(/(?:^|\n|\s+)(?:\(?([A-Ha-h1-8])[\).:\-]\s+)([^\n\r]+)/g)];
     if (textOptions.length >= 2) {
       options = textOptions.map(m => `${m[1].toUpperCase()}) ${m[2].trim()}`);
-      const firstOptIndex = raw.search(/(?:^|\n|\s+)(?:\(?([A-Ea-e1-5])[\).:\-]\s+)/);
+      const firstOptIndex = raw.search(/(?:^|\n|\s+)(?:\(?([A-Ha-h1-8])[\).:\-]\s+)/);
       if (firstOptIndex > 5) {
         question = raw.slice(0, firstOptIndex).trim();
       }

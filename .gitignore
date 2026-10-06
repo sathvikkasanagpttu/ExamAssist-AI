@@ -1,0 +1,24 @@
+# Environment variables
+.env
+.env.*
+!.env.example
+server/.env
+server/.env.*
+!server/.env.example
+
+# Dependencies
+node_modules/
+server/node_modules/
+backend/node_modules/
+
+# OS and Editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Build and archive artifacts
+*.zip
+ExamAssist-AI.zip
+dist/
+build/

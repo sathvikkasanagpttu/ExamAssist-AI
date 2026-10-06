@@ -98,19 +98,35 @@ test("Academic Solver: POST /api/assessment/analyze returns 400 for empty questi
   assert.equal(res.body.error, "No question detected");
 });
 
+import { setupStandardMocks, teardownStandardMocks } from "./test-helpers.js";
+
 test("Academic Solver: Binary Search test case returns Option B. O(log n) with full schema", async () => {
-  const res = await dispatchRequest(app, {
-    method: "POST",
-    url: "/api/assessment/analyze",
-    body: {
-      question: "What is the time complexity of binary search?",
-      options: ["O(n)", "O(log n)", "O(n^2)", "O(1)"],
-      type: "MCQ",
-      subject: "Data Structures"
-    }
+  setupStandardMocks({
+    option: "B",
+    text: "O(log n)",
+    directAnswer: { option: "B", text: "O(log n)" },
+    ownSolution: "O(log n)",
+    optionAnalysis: [
+      { option: "A", text: "O(n)", correct: false, isCorrect: false, reason: "Linear search complexity" },
+      { option: "B", text: "O(log n)", correct: true, isCorrect: true, reason: "Binary search repeatedly halves interval" },
+      { option: "C", text: "O(n^2)", correct: false, isCorrect: false, reason: "Quadratic complexity" },
+      { option: "D", text: "O(1)", correct: false, isCorrect: false, reason: "Constant complexity only for single lookup" }
+    ]
   });
 
-  assert.equal(res.status, 200);
+  try {
+    const res = await dispatchRequest(app, {
+      method: "POST",
+      url: "/api/assessment/analyze",
+      body: {
+        question: "What is the time complexity of binary search?",
+        options: ["O(n)", "O(log n)", "O(n^2)", "O(1)"],
+        type: "MCQ",
+        subject: "Data Structures"
+      }
+    });
+
+    assert.equal(res.status, 200);
   const data = res.body;
 
   // Verify direct answer identifies Option B: O(log n)
@@ -143,4 +159,7 @@ test("Academic Solver: Binary Search test case returns Option B. O(log n) with f
   // Verify conformance to AssessmentResponseSchema
   const parseResult = AssessmentResponseSchema.safeParse(data);
   assert.equal(parseResult.success, true);
+  } finally {
+    teardownStandardMocks();
+  }
 });

@@ -19,7 +19,9 @@ export async function generateSearchQueries(analysis, aiClient = defaultAIClient
     });
 
     if (result && Array.isArray(result.queries) && result.queries.length >= 3) {
-      return result.queries.filter(q => q && q.query && typeof q.query === "string");
+      return result.queries
+        .map(q => typeof q === "string" ? { type: "exact", query: q } : q)
+        .filter(q => q && q.query && typeof q.query === "string");
     }
   } catch (err) {
     console.warn("[QueryGenerator] AI query generation error:", err.message);

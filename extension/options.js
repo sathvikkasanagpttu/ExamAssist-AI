@@ -15,7 +15,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Load existing configuration from chrome.storage.local
   const config = await chrome.storage.local.get({
     apiBase: "http://localhost:8787",
-    autoAnswerOnCopy: true,
+    autoAnswerOnCopy: false,
     showFloatingButton: true,
     autoDetectOptions: true
   });
@@ -43,7 +43,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       apiInput.value = base;
     }
 
-    const autoAnswer = autoCopyCheckbox ? autoCopyCheckbox.checked : true;
+    const autoAnswer = autoCopyCheckbox ? autoCopyCheckbox.checked : false;
     const showFloating = showFloatingCheckbox ? showFloatingCheckbox.checked : true;
     const autoDetect = autoDetectCheckbox ? autoDetectCheckbox.checked : true;
 

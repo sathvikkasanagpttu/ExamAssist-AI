@@ -7,7 +7,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   // Set default settings
   await chrome.storage.local.set({
     apiBase: "http://localhost:8787",
-    autoAnswerOnCopy: true,
+    autoAnswerOnCopy: false,
     showFloatingButton: true,
     autoDetectOptions: true
   });

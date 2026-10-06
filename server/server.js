@@ -15,6 +15,8 @@ import { classifyQuestion } from "./pipeline/classifier.js";
 import { generateSearchQueries, orchestrateSearch } from "./pipeline/searchOrchestrator.js";
 import { generateReasonedAnswer } from "./pipeline/reasoningEngine.js";
 import { runVerificationPass } from "./pipeline/verificationPass.js";
+import { defaultAIClient, AIError, AIConfigError } from "./aiClient.js";
+import { getActiveSearchProvider } from "./pipeline/search.js";
 
 const app = express();
 
@@ -60,6 +62,9 @@ app.get(["/health", "/api/health"], (_req, res) => {
     service: "ExamAssist AI Assessment Copilot",
     version: "2.1.0",
     uptimeSeconds: Math.floor(process.uptime()),
+    aiConfigured: defaultAIClient.isConfigured,
+    searchProvider: getActiveSearchProvider(),
+    model: defaultAIClient.model,
     pipelineSteps: [
       "1. Question Extraction & Analysis",
       "2. Subject & Type Classification",
@@ -128,10 +133,18 @@ app.post("/api/assessment/analyze", async (req, res) => {
     if (err.message === "EMPTY_QUESTION") {
       return res.status(400).json({ error: "No question detected" });
     }
+    if (err instanceof AIError || (err.code && err.code.startsWith("AI_"))) {
+      logger.warn("Assessment analyze AI error", { code: err.code, message: err.message });
+      return res.status(err.status || 503).json({
+        error: err.message,
+        code: err.code,
+        message: err.message
+      });
+    }
     logger.error("Assessment analyze failed", { errorCategory: "PIPELINE_ERROR", message: err.message });
     res.status(500).json({
       error: "Analysis failed",
-      message: "Unable to verify this answer because reliable evidence was not available."
+      message: err.message || "Unable to verify this answer because reliable evidence was not available."
     });
   }
 });

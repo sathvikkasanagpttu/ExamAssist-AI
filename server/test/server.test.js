@@ -1,7 +1,16 @@
-import test from "node:test";
+import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import app from "../server.js";
+import { setupStandardMocks, teardownStandardMocks } from "./test-helpers.js";
+
+beforeEach(() => {
+  setupStandardMocks();
+});
+
+afterEach(() => {
+  teardownStandardMocks();
+});
 
 // In-memory request dispatcher for Express without needing TCP socket permissions
 function dispatchRequest(app, { method, url, body }) {

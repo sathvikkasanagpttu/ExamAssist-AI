@@ -582,3 +582,78 @@
   gap: 8px;
   margin-top: 14px;
 }
+
+/* ==========================================================================
+   AI Disclaimer Notice & Configuration Banners
+   ========================================================================== */
+.examai-disclaimer-notice {
+  margin: 10px 0;
+  padding: 8px 12px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 8px;
+  font-size: 11.5px;
+  color: #fbbf24;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.4;
+}
+
+.examai-config-banner {
+  margin: 12px 0;
+  padding: 12px 14px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: #fca5a5;
+  line-height: 1.45;
+}
+
+.examai-config-banner strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #f87171;
+}
+
+.examai-mcq-warning {
+  margin: 8px 0;
+  padding: 8px 10px;
+  background: rgba(234, 179, 8, 0.15);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  border-radius: 6px;
+  font-size: 11.5px;
+  color: #fde047;
+}
+
+/* ==========================================================================
+   Edit Before Sending Drawer
+   ========================================================================== */
+.examai-edit-box {
+  margin-top: 10px;
+  padding: 10px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+}
+
+.examai-edit-textarea {
+  width: 100%;
+  height: 60px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #0f172a;
+  border: 1px solid #475569;
+  color: #f8fafc;
+  font-size: 12px;
+  font-family: inherit;
+  resize: vertical;
+  margin-top: 4px;
+  box-sizing: border-box;
+  outline: none;
+}
+
+.examai-edit-textarea:focus {
+  border-color: #3b82f6;
+}

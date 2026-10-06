@@ -108,33 +108,25 @@ ${ANTI_HALLUCINATION_PROMPT}`,
     console.warn("[Verifier] Evidence verification error:", err.message);
   }
 
-  // Fallback verification calculation if AI is offline
+  // If AI verification was unavailable, strictly mark UNVERIFIED
   if (!verificationResult) {
-    const highQualitySources = sources.filter(s => s.quality === "HIGH");
-    let calculatedLevel = "MEDIUM";
-
+    let calculatedLevel = "UNVERIFIED";
     if (contradictionData.status === "CONFLICTING_EVIDENCE") {
       calculatedLevel = "CONFLICTING";
-    } else if (sources.length === 0) {
-      calculatedLevel = "UNVERIFIED";
-    } else if (highQualitySources.length >= 2) {
-      calculatedLevel = "HIGH";
-    } else if (sources.length === 1 && highQualitySources.length === 0) {
-      calculatedLevel = "LOW";
     }
 
     verificationResult = {
       overall_evidence_level: calculatedLevel,
       claims: [
         {
-          claim: "Core theoretical conclusion and direct answer",
-          status: "SUPPORTED",
-          supporting_sources: sources.slice(0, 2).map((_, i) => i + 1),
-          reason: "Directly referenced in authoritative academic documentation."
+          claim: "Answer claims require independent verification.",
+          status: "UNSUPPORTED",
+          supporting_sources: [],
+          reason: "Verification could not be performed against reliable evidence."
         }
       ],
       conflicts: contradictionData.conflicts || [],
-      required_revisions: []
+      required_revisions: ["Independent verification required before submission."]
     };
   }
 

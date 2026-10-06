@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { analyzeQuestion } from "../pipeline/analyzer.js";
 import { generateSearchQueries } from "../pipeline/queryGenerator.js";
@@ -6,6 +6,15 @@ import { deduplicateSources } from "../pipeline/search.js";
 import { evaluateSources } from "../pipeline/evaluator.js";
 import { detectContradictions, verifyEvidence } from "../pipeline/verifier.js";
 import { runExamAIPipeline } from "../pipeline/orchestrator.js";
+import { setupStandardMocks, teardownStandardMocks } from "./test-helpers.js";
+
+beforeEach(() => {
+  setupStandardMocks();
+});
+
+afterEach(() => {
+  teardownStandardMocks();
+});
 
 test("Question Analyzer identifies MCQ questions", () => {
   const mcq = `What is the primary function of mitochondria?

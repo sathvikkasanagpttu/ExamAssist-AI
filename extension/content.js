@@ -1,3 +1,9 @@
+/**
+ * ExamAssist AI - Content Script (Manifest V3)
+ * Provides on-page assessment assistance with evidence-first reasoning,
+ * domain allow-list checking, option integrity, and transparent confidence ratings.
+ */
+
 (() => {
   const PANEL_ID = "examai-panel";
   const FLOAT_BTN_ID = "examai-floating-btn";
@@ -11,6 +17,161 @@
   // Session History (cleared on close by default)
   const sessionHistory = [];
   let currentHistoryIndex = -1;
+
+  const alive = () => {
+    try {
+      return Boolean(window.chrome && chrome.runtime && chrome.runtime.id);
+    } catch {
+      return false;
+    }
+  };
+
+  async function getCfg(defaults) {
+    if (!alive()) return { ...defaults };
+    try {
+      return await chrome.storage.local.get(defaults);
+    } catch (err) {
+      console.warn("[ExamAssist] Storage get error or invalidated context:", err);
+      return { ...defaults };
+    }
+  }
+
+  async function setCfg(items) {
+    if (!alive()) return;
+    try {
+      await chrome.storage.local.set(items);
+    } catch (err) {
+      console.warn("[ExamAssist] Storage set error or invalidated context:", err);
+    }
+  }
+
+  async function isSiteAllowed() {
+    const cfg = await getCfg({
+      enableAllSites: false,
+      allowedSites: ["localhost", "127.0.0.1"]
+    });
+    if (cfg.enableAllSites) return true;
+    const host = window.location.hostname.toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1") return true;
+    return (cfg.allowedSites || []).some(s => host === s.toLowerCase() || host.endsWith("." + s.toLowerCase()));
+  }
+
+  function showInvalidatedBanner() {
+    let panel = document.getElementById(PANEL_ID);
+    if (!panel) {
+      panel = document.createElement("aside");
+      panel.id = PANEL_ID;
+      document.body.appendChild(panel);
+    }
+    panel.className = currentTheme === "light" ? "examai-theme-light" : "";
+    panel.innerHTML = `
+      <div class="examai-head">
+        <div class="examai-title-wrap">
+          <strong>ExamAssist AI</strong>
+        </div>
+        <div class="examai-actions">
+          <button class="examai-btn-icon" id="examai-close" title="Close">✕</button>
+        </div>
+      </div>
+      <div class="examai-body" style="padding:16px;">
+        <div style="padding:14px;background:#1e293b;border:1px solid #3b82f6;border-radius:8px;color:#f8fafc;font-size:13px;line-height:1.5;">
+          <strong style="display:block;margin-bottom:6px;color:#60a5fa;">Extension Updated</strong>
+          The extension was updated or reloaded in Chrome. Please refresh this page (<strong>F5</strong> or <strong>Cmd+R</strong>) and try again.
+        </div>
+      </div>`;
+    panel.querySelector("#examai-close").onclick = removePanel;
+  }
+
+  /**
+   * Fallback parser for extracting question text and options (A-H, 1-8)
+   * from raw text when options are not captured separately in DOM containers.
+   */
+  function parseQuestionAndOptions(raw) {
+    if (!raw || typeof raw !== "string") {
+      return { question: "", options: [] };
+    }
+    const text = raw.trim();
+
+    // 1. Line-by-line strategy
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const optionRegex = /^(?:\(?([A-Ha-h0-9])[\.\)\:\-\]]|\[([A-Ha-h0-9])\])\s+(.+)$/;
+
+    const rawMatches = [];
+    const questionLines = [];
+    let foundFirstOption = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const match = line.match(optionRegex);
+      if (match) {
+        const key = (match[1] || match[2] || "").toUpperCase();
+        const isDigit = /^\d+$/.test(key);
+        const hasQuestionMark = line.includes("?");
+        const laterHasLetters = lines.slice(i + 1).some(l => /^(?:\(?[A-Da-d][\.\)\:\-\]]|\[[A-Da-d]\])/.test(l));
+
+        if (isDigit && (hasQuestionMark || laterHasLetters)) {
+          questionLines.push(line);
+          continue;
+        }
+
+        foundFirstOption = true;
+        const optText = match[3].trim();
+        rawMatches.push({ letter: key, text: optText });
+      } else {
+        if (!foundFirstOption) {
+          questionLines.push(line);
+        } else {
+          if (rawMatches.length > 0) {
+            rawMatches[rawMatches.length - 1].text += " " + line;
+          } else {
+            questionLines.push(line);
+          }
+        }
+      }
+    }
+
+    if (rawMatches.length >= 2) {
+      const q = questionLines.join("\n").trim();
+      return {
+        question: q.length >= 3 ? q : text,
+        options: rawMatches.map(m => `${m.letter}) ${m.text}`)
+      };
+    }
+
+    // 2. Inline strategy
+    const markerRegex = /(?:^|\s+)(?:\(?([A-Ha-h1-8])[\.\)\:\-]|\[([A-Ha-h1-8])\])(?=\s+)/g;
+    const matches = [...text.matchAll(markerRegex)];
+    if (matches.length >= 2) {
+      const keys = matches.map(m => (m[1] || m[2]).toUpperCase());
+      const isAlphaSeq = keys[0] === "A" && keys[1] === "B";
+      const isNumSeq = keys[0] === "1" && keys[1] === "2";
+      const uniqueKeys = new Set(keys);
+      if (isAlphaSeq || isNumSeq || uniqueKeys.size === keys.length) {
+        const q = text.slice(0, matches[0].index).trim();
+        const inlineOpts = [];
+        for (let i = 0; i < matches.length; i++) {
+          const key = keys[i];
+          const start = matches[i].index + matches[i][0].length;
+          const end = (i + 1 < matches.length) ? matches[i + 1].index : text.length;
+          const optBody = text.slice(start, end).trim();
+          if (optBody) {
+            inlineOpts.push(`${key}) ${optBody}`);
+          }
+        }
+        if (inlineOpts.length >= 2) {
+          return {
+            question: q.length >= 3 ? q : text,
+            options: inlineOpts
+          };
+        }
+      }
+    }
+
+    return {
+      question: text,
+      options: []
+    };
+  }
 
   function getExtractionManager() {
     if (!extractionManager && window.ExamAssist?.ExtractionManager) {
@@ -36,7 +197,6 @@
   function removePanel() {
     removeElement(PANEL_ID);
     removeFloatingBtn();
-    // Clear session history on close by default
     sessionHistory.length = 0;
     currentHistoryIndex = -1;
   }
@@ -87,7 +247,7 @@
     let initialX = 0, initialY = 0;
 
     handle.addEventListener("mousedown", (e) => {
-      if (e.target.closest("button") || e.target.closest(".examai-mode-badge")) return;
+      if (e.target.closest("button") || e.target.closest(".examai-mode-badge") || e.target.closest("input") || e.target.closest("textarea")) return;
       isDragging = true;
       startX = e.clientX;
       startY = e.clientY;
@@ -150,7 +310,7 @@
   }
 
   /**
-   * Renders the loading skeleton
+   * Renders the loading skeleton and prompt preview
    */
   function renderLoading(captured) {
     removeFloatingBtn();
@@ -165,6 +325,8 @@
     if (isMinimized) panel.classList.add("examai-minimized");
 
     const modeClass = currentMode === "Authorized Assessment Mode" ? "examai-mode-authorized" : "examai-mode-practice";
+    const optionsCount = (captured.options || []).length;
+    const looksLikeMCQ = /\?|\bwhich of the following\b|\bchoose\b/i.test(captured.question || "");
 
     panel.innerHTML = `
       <div class="examai-head">
@@ -179,21 +341,44 @@
         </div>
       </div>
       <div class="examai-body">
+        <div class="examai-disclaimer-notice">
+          <span>⚠️ AI can be wrong, verify before you submit.</span>
+        </div>
+
         <div class="examai-label">Question Detected</div>
         <div class="examai-question">${esc(captured.question)}</div>
-        <div class="examai-skeleton-container">
+        <div style="font-size:11px;color:#94a3b8;margin:6px 0;">Sent to AI: ${optionsCount} option(s) detected</div>
+
+        ${looksLikeMCQ && optionsCount < 2 ? `
+          <div class="examai-mcq-warning">
+            ⚠️ MCQ detected but fewer than 2 options found. Select options with the question or edit them below.
+          </div>
+        ` : ""}
+
+        <details class="examai-edit-box">
+          <summary style="cursor:pointer;font-size:12px;color:#93c5fd;font-weight:600;">✏️ Edit before sending</summary>
+          <div style="margin-top:8px;">
+            <label style="font-size:11px;color:#94a3b8;display:block;">Question Prompt:</label>
+            <textarea id="examai-edit-q" class="examai-edit-textarea">${esc(captured.question)}</textarea>
+            <label style="font-size:11px;color:#94a3b8;display:block;margin-top:6px;">Options (one per line):</label>
+            <textarea id="examai-edit-opts" class="examai-edit-textarea" placeholder="A. Option 1&#10;B. Option 2">${esc((captured.options || []).join("\n"))}</textarea>
+            <button id="examai-submit-edit" class="examai-btn-action" style="margin-top:8px;background:#2563eb;border-color:#3b82f6;">Re-Analyze with Edits</button>
+          </div>
+        </details>
+
+        <div class="examai-skeleton-container" style="margin-top:14px;">
           <div class="examai-skeleton-bar" style="width: 85%;"></div>
           <div class="examai-skeleton-bar" style="width: 100%;"></div>
           <div class="examai-skeleton-bar" style="width: 70%;"></div>
-          <div class="examai-skeleton-bar" style="width: 90%;"></div>
           <div style="text-align:center;color:#60a5fa;font-size:12px;margin-top:14px;">
-            Running multi-angle search, evidence extraction & verification pass…
+            Solving from first principles, verifying sources & checking option integrity…
           </div>
         </div>
       </div>`;
 
     makeDraggable(panel, panel.querySelector(".examai-head"));
     bindHeaderControls(panel, captured);
+    bindEditBox(panel);
   }
 
   function bindHeaderControls(panel, currentCaptured) {
@@ -207,7 +392,7 @@
     panel.querySelector("#examai-theme-toggle").onclick = () => {
       currentTheme = currentTheme === "dark" ? "light" : "dark";
       panel.classList.toggle("examai-theme-light", currentTheme === "light");
-      chrome.storage.local.set({ theme: currentTheme });
+      setCfg({ theme: currentTheme });
     };
 
     panel.querySelector("#examai-mode-toggle").onclick = () => {
@@ -218,6 +403,24 @@
       } else {
         currentMode = "Practice Mode";
         updateModeBadge(panel);
+      }
+    };
+  }
+
+  function bindEditBox(panel) {
+    const editBtn = panel.querySelector("#examai-submit-edit");
+    if (!editBtn) return;
+    editBtn.onclick = () => {
+      const qInput = panel.querySelector("#examai-edit-q");
+      const optsInput = panel.querySelector("#examai-edit-opts");
+      const newQ = (qInput?.value || "").trim();
+      const rawOpts = (optsInput?.value || "").trim().split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+      if (newQ) {
+        executeAnalyze({
+          question: newQ,
+          options: rawOpts
+        });
       }
     };
   }
@@ -291,7 +494,7 @@
         </a>
         <div class="examai-source-meta">
           <span>${esc(s.domain || "web")}</span>
-          <span class="examai-source-score">${s.authority || 80}/100</span>
+          <span class="examai-source-score">Relevance ${s.relevance || 75}%</span>
         </div>
       </div>
     `).join("");
@@ -306,10 +509,12 @@
         </div>`;
     }
 
-    // History info
-    const historyText = sessionHistory.length > 1
-      ? `<small style="color:#64748b">(${currentHistoryIndex + 1} of ${sessionHistory.length})</small>`
-      : "";
+    // Verification Status Badge
+    const vStatus = data.verification?.status || "UNVERIFIED";
+
+    const safeOptionsCount = Array.isArray(captured?.options) && captured.options.length > 0
+      ? captured.options.length
+      : (Array.isArray(data.options) ? data.options.length : (Array.isArray(data.optionAnalysis) ? data.optionAnalysis.length : 0));
 
     panel.innerHTML = `
       <div class="examai-head">
@@ -326,11 +531,16 @@
         </div>
       </div>
       <div class="examai-body">
+        <div class="examai-disclaimer-notice">
+          <span>⚠️ AI can be wrong, verify before you submit.</span>
+        </div>
+
         <div class="examai-label">
-          <span>Question ${historyText}</span>
+          <span>Question Prompt</span>
           ${data.difficulty ? `<small style="color:#94a3b8">${esc(data.difficulty)}</small>` : ""}
         </div>
         <div class="examai-question">${esc(data.question || captured.question)}</div>
+        <div style="font-size:11px;color:#94a3b8;margin:6px 0;">Sent to AI: ${safeOptionsCount} option(s) detected</div>
 
         <div class="examai-direct-card">
           <div class="examai-direct-title">Direct Answer</div>
@@ -339,9 +549,9 @@
 
         <div class="examai-label" style="margin-top:12px;">
           <span>Confidence & Verification</span>
-          <span class="examai-confidence-badge ${confClass}">● ${esc(confLevel)}</span>
+          <span class="examai-confidence-badge ${confClass}">● ${esc(confLevel)} (${esc(vStatus)})</span>
         </div>
-        <div class="examai-notes-box">${esc(data.confidenceReason || "Verified against retrieved academic documentation.")}</div>
+        <div class="examai-notes-box">${esc(data.confidenceReason || "Verified against academic principles.")}</div>
 
         ${conflictHtml}
         ${optionsHtml}
@@ -352,10 +562,21 @@
           <div class="examai-explanation">${esc(data.explanation)}</div>
         ` : ""}
 
-        <div class="examai-label">Authoritative Sources (${(data.sources || []).length})</div>
+        <div class="examai-label">Supporting Evidence (${(data.sources || []).length})</div>
         <div class="examai-sources-grid">
-          ${sources || `<div style="font-size:12px;color:#94a3b8;">No external sources required or returned.</div>`}
+          ${sources || `<div style="font-size:12px;color:#94a3b8;">No web evidence retrieved or required for this question type.</div>`}
         </div>
+
+        <details class="examai-edit-box">
+          <summary style="cursor:pointer;font-size:12px;color:#93c5fd;font-weight:600;">✏️ Edit question or options before re-analyzing</summary>
+          <div style="margin-top:8px;">
+            <label style="font-size:11px;color:#94a3b8;display:block;">Question Prompt:</label>
+            <textarea id="examai-edit-q" class="examai-edit-textarea">${esc(data.question || captured.question)}</textarea>
+            <label style="font-size:11px;color:#94a3b8;display:block;margin-top:6px;">Options (one per line):</label>
+            <textarea id="examai-edit-opts" class="examai-edit-textarea">${esc((captured.options || []).join("\n"))}</textarea>
+            <button id="examai-submit-edit" class="examai-btn-action" style="margin-top:8px;background:#2563eb;border-color:#3b82f6;">Re-Analyze with Edits</button>
+          </div>
+        </details>
       </div>
       <div class="examai-footer-bar">
         <button id="examai-copy-ans" class="examai-btn-action">📋 Copy Answer</button>
@@ -366,6 +587,7 @@
 
     makeDraggable(panel, panel.querySelector(".examai-head"));
     bindHeaderControls(panel, captured);
+    bindEditBox(panel);
 
     // Bind action buttons
     panel.querySelector("#examai-copy-ans").onclick = () => {
@@ -400,25 +622,48 @@
    * Dispatches the question to the backend /api/assessment/analyze endpoint
    */
   async function executeAnalyze(captured) {
+    if (!alive()) {
+      showInvalidatedBanner();
+      return;
+    }
+
     if (!captured) return;
-    const questionText = (captured.question || captured.text || "").trim();
+    let questionText = (captured.question || captured.text || "").trim();
     if (questionText.length < 3) return;
+
+    // Ensure options are clean strings, avoiding [object Object]
+    let safeOptions = (captured.options || []).map(o => {
+      if (typeof o === "string") return o.trim();
+      return (o.text || o.option || JSON.stringify(o)).trim();
+    }).filter(Boolean);
+
+    // Fallback: If no options detected from DOM containers, parse question text for embedded options
+    if (safeOptions.length === 0) {
+      const parsed = parseQuestionAndOptions(questionText);
+      if (parsed.options.length >= 2) {
+        questionText = parsed.question;
+        safeOptions = parsed.options;
+        captured.question = parsed.question;
+        captured.options = parsed.options;
+      }
+    }
+
+    console.log("EXAMASSIST SENDING:", {
+      question: questionText,
+      optionsCount: safeOptions.length,
+      options: safeOptions
+    });
+
     renderLoading(captured);
 
     try {
-      const cfg = await chrome.storage.local.get({
+      const cfg = await getCfg({
         apiBase: "http://localhost:8787",
         theme: "dark",
         mode: "Practice Mode"
       });
 
       if (cfg.theme) currentTheme = cfg.theme;
-
-      // Ensure options are clean strings, avoiding [object Object]
-      const safeOptions = (captured.options || []).map(o => {
-        if (typeof o === "string") return o.trim();
-        return (o.text || o.option || JSON.stringify(o)).trim();
-      });
 
       const res = await fetch(`${cfg.apiBase}/api/assessment/analyze`, {
         method: "POST",
@@ -434,7 +679,13 @@
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.message || "Failed to analyze question");
+      if (!res.ok) {
+        const errorMsg = data.message || data.error || "Failed to analyze question";
+        const errorCode = data.code || "PIPELINE_ERROR";
+        const customErr = new Error(errorMsg);
+        customErr.code = errorCode;
+        throw customErr;
+      }
 
       // Push to session history
       sessionHistory.push({ data, captured });
@@ -444,20 +695,34 @@
     } catch (err) {
       const panel = document.getElementById(PANEL_ID);
       if (panel) {
+        const isNotConfigured = err.code === "AI_NOT_CONFIGURED" || String(err.message).includes("OPENAI_API_KEY");
         panel.querySelector(".examai-body").innerHTML = `
-          <div style="padding:16px;background:#451a1a;border:1px solid #7f1d1d;border-radius:8px;color:#fecaca;font-size:12.5px;">
-            <strong style="display:block;margin-bottom:4px;color:#f87171;">Assessment Error:</strong>
-            ${esc(err.message)}
-            <div style="margin-top:8px;font-size:11.5px;color:#fca5a5;">
-              Ensure the backend is running at <code>http://localhost:8787</code> and reachable.
+          ${isNotConfigured ? `
+            <div class="examai-config-banner">
+              <strong>⚠️ AI Key Not Configured</strong>
+              Please add <code>OPENAI_API_KEY</code> in <code>server/.env</code> and restart the backend server to enable AI analysis.
             </div>
-          </div>`;
+          ` : `
+            <div style="padding:16px;background:#451a1a;border:1px solid #7f1d1d;border-radius:8px;color:#fecaca;font-size:12.5px;">
+              <strong style="display:block;margin-bottom:4px;color:#f87171;">Assessment Error:</strong>
+              ${esc(err.message)}
+              <div style="margin-top:8px;font-size:11.5px;color:#fca5a5;">
+                Ensure the backend is running at <code>http://localhost:8787</code> and reachable.
+              </div>
+            </div>
+          `}`;
       }
     }
   }
 
   // --- TRIGGER 1: User Text Selection ---
-  document.addEventListener("mouseup", async () => {
+  document.addEventListener("mouseup", async (e) => {
+    if (!alive()) return;
+    if (e.target.closest && e.target.closest(`#${PANEL_ID}`)) return;
+
+    const allowed = await isSiteAllowed();
+    if (!allowed) return;
+
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
       removeFloatingBtn();
@@ -470,22 +735,34 @@
       return;
     }
 
-    const cfg = await chrome.storage.local.get({ showFloatingButton: true });
+    const cfg = await getCfg({ showFloatingButton: true });
     if (!cfg.showFloatingButton) return;
 
     const manager = getExtractionManager();
     const captured = manager ? manager.extractFromSelection(sel) : { question: text, options: [] };
+
+    if (!captured.options || captured.options.length === 0) {
+      const parsed = parseQuestionAndOptions(text);
+      if (parsed.options.length >= 2) {
+        captured.question = parsed.question;
+        captured.options = parsed.options;
+      }
+    }
 
     if (captured && captured.question) {
       showFloatingButton(sel.getRangeAt(0), captured);
     }
   });
 
-  // --- TRIGGER 2: User Copy Action ---
+  // --- TRIGGER 2: User Copy Action (disabled by default) ---
   document.addEventListener("copy", async () => {
+    if (!alive()) return;
+    const allowed = await isSiteAllowed();
+    if (!allowed) return;
+
     const sel = window.getSelection();
     const text = sel?.toString()?.trim();
-    const cfg = await chrome.storage.local.get({ autoAnswerOnCopy: true });
+    const cfg = await getCfg({ autoAnswerOnCopy: false });
 
     if (cfg.autoAnswerOnCopy && text && text.length >= 5) {
       removeFloatingBtn();
@@ -498,37 +775,49 @@
   });
 
   // --- TRIGGER 3: Extension Messages (Context Menu & Popup) ---
-  chrome.runtime.onMessage.addListener((msg) => {
-    if (msg.type === "RESEARCH_SELECTION") {
-      removeFloatingBtn();
-      const sel = window.getSelection();
-      const manager = getExtractionManager();
-      const captured = manager ? manager.extractFromSelection(sel) : { question: msg.text, options: [] };
-      executeAnalyze(captured);
-    } else if (msg.type === "TRIGGER_EXAM_ASSIST") {
-      removeFloatingBtn();
-      const manager = getExtractionManager();
-      const sel = window.getSelection();
-      let captured = null;
-      if (sel && sel.toString().trim().length >= 5) {
-        captured = manager ? manager.extractFromSelection(sel) : { question: sel.toString().trim(), options: [] };
-      } else {
-        captured = manager ? manager.extract(document.activeElement) : null;
-      }
-      if (captured && captured.question) {
-        executeAnalyze(captured);
-      }
-    } else if (msg.type === "ASK") {
-      removeFloatingBtn();
-      executeAnalyze({ question: msg.question, options: [] });
+  if (alive()) {
+    try {
+      chrome.runtime.onMessage.addListener((msg) => {
+        if (!alive()) return;
+        if (msg.type === "RESEARCH_SELECTION") {
+          removeFloatingBtn();
+          const sel = window.getSelection();
+          const manager = getExtractionManager();
+          const captured = manager ? manager.extractFromSelection(sel) : { question: msg.text, options: [] };
+          executeAnalyze(captured);
+        } else if (msg.type === "TRIGGER_EXAM_ASSIST") {
+          removeFloatingBtn();
+          const manager = getExtractionManager();
+          const sel = window.getSelection();
+          let captured = null;
+          if (sel && sel.toString().trim().length >= 5) {
+            captured = manager ? manager.extractFromSelection(sel) : { question: sel.toString().trim(), options: [] };
+          } else {
+            captured = manager ? manager.extract(document.activeElement) : null;
+          }
+          if (captured && captured.question) {
+            executeAnalyze(captured);
+          }
+        } else if (msg.type === "ASK") {
+          removeFloatingBtn();
+          executeAnalyze({ question: msg.question, options: [] });
+        }
+      });
+    } catch (e) {
+      console.warn("[ExamAssist] Could not register onMessage listener:", e);
     }
-  });
+  }
 
   // --- TRIGGER 4: In-page Keyboard Shortcut (Ctrl+Shift+E / Cmd+Shift+E) ---
-  document.addEventListener("keydown", (e) => {
+  document.addEventListener("keydown", async (e) => {
+    if (!alive()) return;
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "E" || e.key === "e")) {
       e.preventDefault();
       removeFloatingBtn();
+
+      const allowed = await isSiteAllowed();
+      if (!allowed) return;
+
       const manager = getExtractionManager();
       const sel = window.getSelection();
       let captured = null;
@@ -544,7 +833,7 @@
   });
 
   // Load preferences
-  chrome.storage.local.get({ theme: "dark" }).then(res => {
-    if (res.theme) currentTheme = res.theme;
+  getCfg({ theme: "dark" }).then(res => {
+    if (res && res.theme) currentTheme = res.theme;
   });
 })();

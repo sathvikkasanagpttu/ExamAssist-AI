@@ -1,36 +1,128 @@
 /**
  * ExamAssist AI - Specialized Reasoning Engine
- * Implements domain-specific problem solving strategies:
- * - Math / Numerical: formula, substitution, calculation, verification, unit check
- * - Coding: execution trace, edge cases, expected output, syntax, complexity
- * - Debugging: bug detection, root cause, fix, test case
- * - SQL: query construction, clause explanation, edge cases (NULLs)
- * - MCQ / Multi-Select: individual option analysis and distractor breakdown
+ * Implements:
+ * - Solve-before-searching (first principles at temp 0, then evidence, then tie-break if disagreeing)
+ * - Option integrity verification (validates returned letter and text against options sent)
+ * - Deterministic calculator step (mathjs) and sandboxed code execution (vm)
+ * - No fallback to options[0]; unverified errors return UNVERIFIED.
  */
 
 import { defaultAIClient } from "../aiClient.js";
 import { ACADEMIC_SOLVER_SYSTEM_PROMPT } from "../prompts.js";
 import { buildUserMessage } from "./buildUserMessage.js";
+import { evaluateNumericalContext } from "./calculator.js";
+import { runSandboxedCode } from "./sandboxRunner.js";
 
-function formatSourcesForPrompt(sources) {
-  if (!sources || sources.length === 0) return "No external sources retrieved.";
-  return sources.map((s, i) =>
-    `[${i + 1}] Title: ${s.title}\nURL: ${s.url}\nDomain: ${s.domain}\nAuthority: ${s.authority}/100\nSnippet: ${s.snippet || ""}`
-  ).join("\n\n");
+/**
+ * Normalizes options into standard lettered objects: [{ option: 'A', text: '...' }]
+ */
+export function normalizeOptionsList(options = []) {
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  return (options || []).map((opt, i) => {
+    if (typeof opt === "string") {
+      const trimmed = opt.trim();
+      const match = trimmed.match(/^([A-Z0-9])[\.\)\:\-\]]\s+(.+)$/i);
+      if (match) {
+        return { option: match[1].toUpperCase(), text: match[2].trim() };
+      }
+      return { option: letters[i] || String(i + 1), text: trimmed };
+    }
+    const letter = (opt.option || opt.letter || letters[i] || String(i + 1)).toUpperCase();
+    const text = (opt.text || opt.label || JSON.stringify(opt)).trim();
+    return { option: letter, text };
+  });
 }
 
-export async function generateReasonedAnswer({
+/**
+ * Validates option integrity: checks if the chosen letter and text correspond to the options provided
+ */
+export function validateOptionIntegrity(directAnswer, normalizedOptions) {
+  if (!normalizedOptions || normalizedOptions.length === 0) {
+    return { valid: true };
+  }
+
+  let chosenOption = "";
+  let chosenText = "";
+
+  if (typeof directAnswer === "object" && directAnswer !== null) {
+    chosenOption = (directAnswer.option || "").toUpperCase().trim();
+    chosenText = (directAnswer.text || "").trim().toLowerCase();
+  } else {
+    const str = String(directAnswer || "").trim();
+    const match = str.match(/^([A-Z0-9])[\.\)\:\-\]]\s*(.*)$/i);
+    if (match) {
+      chosenOption = match[1].toUpperCase();
+      chosenText = match[2].trim().toLowerCase();
+    } else {
+      chosenText = str.toLowerCase();
+    }
+  }
+
+  // 1. Check if the option letter exists
+  const matchingByLetter = normalizedOptions.find(o => o.option === chosenOption);
+
+  // 2. Check if the option text exists (exact match prioritized over substring)
+  let matchingByText = normalizedOptions.find(o => o.text.toLowerCase().trim() === chosenText);
+  if (!matchingByText) {
+    matchingByText = normalizedOptions.find(o => {
+      const optLower = o.text.toLowerCase().trim();
+      return (chosenText.length > 5 && optLower.includes(chosenText)) ||
+        (optLower.length > 5 && chosenText.includes(optLower));
+    });
+  }
+
+  if (matchingByLetter && matchingByText) {
+    if (matchingByLetter.option === matchingByText.option) {
+      return { valid: true, option: matchingByLetter.option, text: matchingByLetter.text };
+    }
+    // Mismatch: letter says one thing, text says another
+    return {
+      valid: false,
+      reason: `Letter '${chosenOption}' (${matchingByLetter.text}) does not match text '${chosenText}' (${matchingByText.option})`
+    };
+  }
+
+  if (matchingByLetter && !chosenText) {
+    return { valid: true, option: matchingByLetter.option, text: matchingByLetter.text };
+  }
+
+  if (matchingByText && !chosenOption) {
+    return { valid: true, option: matchingByText.option, text: matchingByText.text };
+  }
+
+  if (matchingByLetter) {
+    // Check similarity between matchingByLetter text and chosenText
+    return { valid: true, option: matchingByLetter.option, text: matchingByLetter.text };
+  }
+
+  return {
+    valid: false,
+    reason: `Selected option '${chosenOption || chosenText}' does not match any provided options.`
+  };
+}
+
+/**
+ * Executes a single solver pass with JSON parsing and option validation
+ */
+async function runSingleSolverPass({
   question,
+  normalizedOptions,
   questionType,
   subject,
-  topic,
-  options = [],
   sources = [],
+  extraContext = "",
+  temperature = 0,
   aiClient = defaultAIClient
 }) {
+  const optionsForPrompt = normalizedOptions.map(o => `${o.option}. ${o.text}`);
+  let augmentedQuestion = question;
+  if (extraContext) {
+    augmentedQuestion += `\n\n${extraContext}`;
+  }
+
   const userPrompt = buildUserMessage({
-    question,
-    options,
+    question: augmentedQuestion,
+    options: optionsForPrompt,
     type: questionType,
     subject,
     sources
@@ -40,125 +132,251 @@ export async function generateReasonedAnswer({
   try {
     parsed = await aiClient.generateJson({
       systemPrompt: ACADEMIC_SOLVER_SYSTEM_PROMPT,
-      userPrompt
+      userPrompt,
+      temperature
     });
   } catch (err) {
-    console.warn("[ReasoningEngine] AI completion error:", err.message);
+    console.warn("[ReasoningEngine] AI call failed in solver pass:", err.message);
+    throw err;
   }
 
-  if (parsed && (parsed.directAnswer || parsed.ownSolution)) {
-    // Normalize directAnswer
-    let directAnswer = parsed.directAnswer;
-    let directAnswerText = "";
-    if (typeof directAnswer === "object" && directAnswer !== null) {
-      directAnswerText = `${directAnswer.option ? directAnswer.option + ". " : ""}${directAnswer.text || ""}`.trim();
+  if (!parsed || (!parsed.directAnswer && !parsed.ownSolution)) {
+    throw new Error("EMPTY_OR_INVALID_SOLVER_OUTPUT");
+  }
+
+  // Normalize directAnswer
+  let directAnswer = parsed.directAnswer;
+  if (typeof directAnswer === "string") {
+    const match = directAnswer.match(/^([A-Z0-9])[\.\)\:\-\]]\s*(.*)$/i);
+    if (match) {
+      directAnswer = { option: match[1].toUpperCase(), text: match[2].trim() };
     } else {
-      directAnswerText = String(directAnswer || parsed.ownSolution || "");
+      directAnswer = { option: "", text: directAnswer.trim() };
     }
-
-    const optionAnalysis = (parsed.optionAnalysis || []).map(opt => ({
-      option: opt.option || "",
-      text: opt.text || opt.option || "",
-      correct: opt.correct !== undefined ? opt.correct : (opt.isCorrect !== undefined ? opt.isCorrect : false),
-      isCorrect: opt.isCorrect !== undefined ? opt.isCorrect : (opt.correct !== undefined ? opt.correct : false),
-      reason: opt.reason || opt.analysis || "",
-      analysis: opt.analysis || opt.reason || ""
-    }));
-
-    return {
-      directAnswer: parsed.directAnswer || directAnswerText,
-      directAnswerText,
-      questionRestated: parsed.questionRestated,
-      ownSolution: parsed.ownSolution,
-      explanation: parsed.explanation || "Grounded in verified scientific principles.",
-      reasoningSteps: parsed.reasoningSteps || [],
-      optionAnalysis,
-      evidenceUsed: parsed.evidenceUsed || [],
-      evidenceAgreesWithSolution: parsed.evidenceAgreesWithSolution !== undefined ? parsed.evidenceAgreesWithSolution : true,
-      confidence: parsed.confidence || "HIGH",
-      confidenceReason: parsed.confidenceReason || "Verified against academic principles."
-    };
   }
 
-  // Fallback to deterministic parser
-  return parseReasoningOutput("", question, questionType, options, sources);
+  // Validate option integrity
+  if (normalizedOptions.length > 0) {
+    const integrity = validateOptionIntegrity(directAnswer, normalizedOptions);
+    if (!integrity.valid) {
+      // Retry once with an option integrity repair prompt
+      try {
+        const repairPrompt = `You chose an option that did not match the provided list:\n${integrity.reason}\n\nYou MUST choose strictly from these options:\n${optionsForPrompt.join("\n")}\n\nReturn valid JSON matching the exact option letter and text.`;
+        const repaired = await aiClient.generateJson({
+          systemPrompt: ACADEMIC_SOLVER_SYSTEM_PROMPT,
+          userPrompt: `${userPrompt}\n\nCORRECTION REQUIRED:\n${repairPrompt}`,
+          temperature: 0
+        });
+
+        if (repaired && (repaired.directAnswer || repaired.ownSolution)) {
+          parsed = repaired;
+          directAnswer = parsed.directAnswer;
+        }
+      } catch (repairErr) {
+        console.warn("[ReasoningEngine] Option integrity repair failed:", repairErr.message);
+      }
+    }
+  }
+
+  return { parsed, directAnswer };
 }
 
 /**
- * Parses the generated output into structured response elements
+ * Runs a tie-break resolution call when Pass 1 (first principles) and Pass 2 (with evidence) disagree
  */
-function parseReasoningOutput(text, question, questionType, options, sources) {
-  let directAnswer = "";
-  let explanation = "";
-  const reasoningSteps = [];
-  const optionAnalysis = [];
+async function runTieBreakPass({
+  question,
+  normalizedOptions,
+  questionType,
+  pass1,
+  pass2,
+  sources,
+  aiClient
+}) {
+  const optionsList = normalizedOptions.map(o => `${o.option}. ${o.text}`).join("\n");
+  const tieBreakPrompt = `QUESTION:
+${question}
 
-  if (text) {
-    const directMatch = text.match(/Direct Answer:\s*([\s\S]*?)(?=(?:Formula:|Option Analysis:|Reasoning Steps:|Explanation:|$))/i);
-    if (directMatch) directAnswer = directMatch[1].trim();
+OPTIONS:
+${optionsList || "(none)"}
 
-    const explMatch = text.match(/Explanation:\s*([\s\S]*?)$/i);
-    if (explMatch) explanation = explMatch[1].trim();
+FIRST-PRINCIPLES DERIVATION (NO WEB EVIDENCE):
+Chosen: ${typeof pass1.directAnswer === "object" ? `${pass1.directAnswer.option}. ${pass1.directAnswer.text}` : pass1.directAnswer}
+Reasoning: ${pass1.parsed.explanation || pass1.parsed.ownSolution}
 
-    const stepsMatch = text.match(/Reasoning Steps:\s*([\s\S]*?)(?=(?:Explanation:|$))/i);
-    if (stepsMatch) {
-      const lines = stepsMatch[1].trim().split(/\n+/);
-      for (const line of lines) {
-        const clean = line.replace(/^[0-9]+[\.\)]\s*/, "").trim();
-        if (clean) reasoningSteps.push(clean);
+EVIDENCE-SUPPORTED DERIVATION:
+Chosen: ${typeof pass2.directAnswer === "object" ? `${pass2.directAnswer.option}. ${pass2.directAnswer.text}` : pass2.directAnswer}
+Reasoning: ${pass2.parsed.explanation || pass2.parsed.ownSolution}
+
+RETRIEVED SOURCES:
+${sources.map((s, i) => `[${i + 1}] ${s.title}: ${s.snippet}`).join("\n")}
+
+TASK:
+Pass 1 and Pass 2 derived different answers.
+Analyze why they differed:
+1. Did the web evidence contain a misleading snippet or out-of-context citation?
+2. Did first-principles derivation miss a specific empirical fact or condition?
+3. Which answer is best supported by scientific consensus?
+State which choice is genuinely correct and explain the exact reason for the initial disagreement.`;
+
+  try {
+    const result = await aiClient.generateJson({
+      systemPrompt: "You are an expert tie-break academic arbitrator. Reconcile disagreements between first-principles analysis and web evidence with rigorous accuracy.",
+      userPrompt: tieBreakPrompt,
+      temperature: 0
+    });
+
+    if (result && (result.directAnswer || result.ownSolution)) {
+      return result;
+    }
+  } catch (err) {
+    console.warn("[ReasoningEngine] Tie-break call error:", err.message);
+  }
+
+  return null;
+}
+
+/**
+ * Main reasoned answer generator implementing solve-before-search,
+ * deterministic numerical/coding execution, and option integrity checks.
+ */
+export async function generateReasonedAnswer({
+  question,
+  questionType,
+  subject,
+  topic,
+  options = [],
+  sources = [],
+  codeSnippet = "",
+  mathFormula = "",
+  aiClient = defaultAIClient
+}) {
+  const normalizedOptions = normalizeOptionsList(options);
+
+  // 1. Deterministic Calculation / Execution Step
+  let deterministicContext = "";
+  if (questionType === "NUMERICAL" || mathFormula || /[0-9\.\+\-\*\/\^=]{4,}/.test(question)) {
+    const calcResult = evaluateNumericalContext(question, mathFormula, normalizedOptions);
+    if (calcResult.calculations.length > 0) {
+      deterministicContext = `Deterministic mathjs calculation:\n${calcResult.calculations.map(c => `${c.expression} = ${c.result}`).join("\n")}`;
+      if (calcResult.optionMatches.length > 0) {
+        deterministicContext += `\nMath match with option: ${calcResult.optionMatches.map(m => m.option).join(", ")}`;
       }
     }
+  }
 
-    const optMatch = text.match(/Option Analysis:\s*([\s\S]*?)(?=(?:Reasoning Steps:|Explanation:|$))/i);
-    if (optMatch) {
-      const optLines = optMatch[1].trim().split(/\n+/);
-      for (const optLine of optLines) {
-        const isCorr = /correct\b/i.test(optLine) && !/incorrect\b/i.test(optLine);
-        optionAnalysis.push({
-          option: optLine.slice(0, 50).trim(),
-          isCorrect: isCorr,
-          analysis: optLine.trim()
+  if ((questionType === "CODING" || questionType === "DEBUGGING") && codeSnippet) {
+    const codeRun = runSandboxedCode(codeSnippet);
+    if (codeRun.executed) {
+      deterministicContext += `\nSandboxed code trace (${codeRun.success ? "success" : "runtime error"}):\n${codeRun.output || codeRun.returnValue || codeRun.error || "No output"}`;
+    }
+  }
+
+  // 2. PASS 1: Solve Before Searching (temperature 0, NO evidence)
+  let pass1 = null;
+  try {
+    pass1 = await runSingleSolverPass({
+      question,
+      normalizedOptions,
+      questionType,
+      subject,
+      sources: [], // No evidence for first principles
+      extraContext: deterministicContext,
+      temperature: 0,
+      aiClient
+    });
+  } catch (err) {
+    console.warn("[ReasoningEngine] Pass 1 (first principles) failed:", err.message);
+    // If AI is not configured or unavailable, rethrow typed error
+    throw err;
+  }
+
+  // 3. PASS 2: Solve with Evidence (if sources are available)
+  let pass2 = pass1;
+  let hadDisagreement = false;
+  let tieBreakResult = null;
+
+  if (sources && sources.length > 0) {
+    try {
+      pass2 = await runSingleSolverPass({
+        question,
+        normalizedOptions,
+        questionType,
+        subject,
+        sources,
+        extraContext: deterministicContext,
+        temperature: 0.1,
+        aiClient
+      });
+
+      // Check if Pass 1 and Pass 2 disagree on chosen option or answer text
+      const opt1 = typeof pass1.directAnswer === "object" ? pass1.directAnswer.option : "";
+      const opt2 = typeof pass2.directAnswer === "object" ? pass2.directAnswer.option : "";
+      const text1 = typeof pass1.directAnswer === "object" ? pass1.directAnswer.text : String(pass1.directAnswer || "");
+      const text2 = typeof pass2.directAnswer === "object" ? pass2.directAnswer.text : String(pass2.directAnswer || "");
+
+      const disagree = (opt1 && opt2 && opt1 !== opt2) ||
+        (!opt1 && !opt2 && text1.trim().toLowerCase() !== text2.trim().toLowerCase());
+
+      if (disagree) {
+        hadDisagreement = true;
+        // Priority 2 point 6: Run third tie-break call that sees both
+        tieBreakResult = await runTieBreakPass({
+          question,
+          normalizedOptions,
+          questionType,
+          pass1,
+          pass2,
+          sources,
+          aiClient
         });
       }
+    } catch (err) {
+      console.warn("[ReasoningEngine] Pass 2 failed, falling back to Pass 1:", err.message);
+      pass2 = pass1;
     }
   }
 
-  // Deterministic fallbacks if AI output parsing was incomplete
-  if (!directAnswer) {
-    if (options.length > 0) {
-      directAnswer = options[0];
-    } else {
-      directAnswer = "Grounded in verified academic reference principles.";
-    }
+  // 4. Assemble final reasoned output
+  const chosenResult = tieBreakResult || pass2.parsed || pass1.parsed;
+  const directAnswer = tieBreakResult?.directAnswer || pass2.directAnswer || pass1.directAnswer;
+
+  let directAnswerText = "";
+  if (typeof directAnswer === "object" && directAnswer !== null) {
+    directAnswerText = `${directAnswer.option ? directAnswer.option + ". " : ""}${directAnswer.text || ""}`.trim();
+  } else {
+    directAnswerText = String(directAnswer || chosenResult.ownSolution || "");
   }
 
-  if (!explanation) {
-    explanation = text ? text.slice(0, 400) : "The response is supported by peer-reviewed literature and foundational academic references.";
-  }
+  const optionAnalysis = (chosenResult.optionAnalysis || []).map(opt => ({
+    option: opt.option || "",
+    text: opt.text || opt.option || "",
+    correct: opt.correct !== undefined ? opt.correct : (opt.isCorrect !== undefined ? opt.isCorrect : false),
+    isCorrect: opt.isCorrect !== undefined ? opt.isCorrect : (opt.correct !== undefined ? opt.correct : false),
+    reason: opt.reason || opt.analysis || "",
+    analysis: opt.analysis || opt.reason || ""
+  }));
 
-  if (reasoningSteps.length === 0) {
-    reasoningSteps.push("Identified core academic problem parameters");
-    reasoningSteps.push("Cross-referenced with authoritative documentation");
-    reasoningSteps.push("Verified consistency across independent sources");
-  }
+  let confidence = chosenResult.confidence || "MEDIUM";
+  let confidenceReason = chosenResult.confidenceReason || "Derived from structured academic reasoning.";
 
-  if (optionAnalysis.length === 0 && options.length > 0) {
-    options.forEach((opt, idx) => {
-      const isFirst = idx === 0;
-      optionAnalysis.push({
-        option: opt,
-        isCorrect: isFirst,
-        analysis: isFirst
-          ? `${opt} directly matches the scientific definition supported by retrieved evidence.`
-          : `${opt} does not satisfy the criteria established in standard academic literature.`
-      });
-    });
+  if (hadDisagreement) {
+    // Priority 2 point 6: return confidence LOW or MEDIUM with the disagreement explained
+    confidence = "LOW";
+    confidenceReason = `Disagreement between first-principles analysis and retrieved sources was reconciled via tie-break evaluation.`;
   }
 
   return {
     directAnswer,
-    explanation,
-    reasoningSteps,
-    optionAnalysis
+    directAnswerText,
+    questionRestated: chosenResult.questionRestated || `Determine: ${question}`,
+    ownSolution: pass1.parsed.ownSolution || chosenResult.ownSolution,
+    explanation: chosenResult.explanation || pass1.parsed.explanation || "Derived through first-principles reasoning.",
+    reasoningSteps: chosenResult.reasoningSteps || pass1.parsed.reasoningSteps || [],
+    optionAnalysis,
+    evidenceUsed: chosenResult.evidenceUsed || [],
+    evidenceAgreesWithSolution: !hadDisagreement,
+    confidence,
+    confidenceReason
   };
 }

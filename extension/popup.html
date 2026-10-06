@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>ExamAI Practice Assistant</title>
+  <title>ExamAssist AI Copilot</title>
   <style>
     body {
-      width: 340px;
+      width: 360px;
       margin: 0;
       padding: 16px;
       font: 13.5px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -40,15 +40,63 @@
       border-color: rgba(34, 197, 94, 0.4);
       color: #4ade80;
     }
+    .status-error {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.4);
+      color: #f87171;
+    }
+    .banner-warning {
+      background: rgba(234, 179, 8, 0.15);
+      border: 1px solid rgba(234, 179, 8, 0.35);
+      color: #fde047;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 12px;
+      margin-bottom: 12px;
+      display: none;
+    }
+    .site-card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+    }
+    .site-domain {
+      font-weight: 600;
+      color: #93c5fd;
+      max-width: 180px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .btn-toggle-site {
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid #3b82f6;
+      background: #2563eb;
+      color: #fff;
+    }
+    .btn-toggle-site.enabled {
+      background: #059669;
+      border-color: #10b981;
+    }
     .muted {
       color: #94a3b8;
       font-size: 12px;
-      margin: 0 0 12px 0;
+      margin: 0 0 10px 0;
       line-height: 1.4;
     }
     textarea {
       width: 100%;
-      height: 72px;
+      height: 68px;
       padding: 8px 10px;
       border-radius: 8px;
       background: #1e293b;
@@ -95,8 +143,8 @@
       color: #fff;
     }
     .controls {
-      margin-top: 14px;
-      padding-top: 12px;
+      margin-top: 12px;
+      padding-top: 10px;
       border-top: 1px solid #334155;
     }
     label {
@@ -113,16 +161,28 @@
 </head>
 <body>
   <div class="head">
-    <h2>ExamAI Practice Assistant</h2>
+    <h2>ExamAssist AI</h2>
     <span id="server-status" class="status-pill">Connecting…</span>
   </div>
 
+  <div id="ai-warning" class="banner-warning">
+    ⚠️ <strong>AI Not Configured:</strong> Add <code>OPENAI_API_KEY</code> in <code>server/.env</code> to enable AI reasoning.
+  </div>
+
+  <div class="site-card">
+    <div>
+      <span style="color:#94a3b8;font-size:11px;display:block;">Current Site</span>
+      <span id="siteDomain" class="site-domain">Loading…</span>
+    </div>
+    <button id="siteToggleBtn" class="btn-toggle-site">Enable on this site</button>
+  </div>
+
   <p class="muted">
-    Select any question & options on your practice test page to trigger instant verification, or paste below:
+    Select question text on page to analyze, or paste prompt below:
   </p>
 
   <textarea id="questionInput" placeholder="Paste practice question & options here…"></textarea>
-  <button id="askBtn" class="btn-primary">Research on Current Page</button>
+  <button id="askBtn" class="btn-primary">Analyze on Current Page</button>
 
   <div class="controls">
     <label>
@@ -130,8 +190,12 @@
       <span>Show floating button on text selection</span>
     </label>
     <label>
+      <input id="allSitesToggle" type="checkbox">
+      <span>Enable assistant on all websites</span>
+    </label>
+    <label>
       <input id="autoCopyToggle" type="checkbox">
-      <span>Auto-research when question is copied</span>
+      <span>Auto-analyze on copy (disabled by default)</span>
     </label>
     <button id="optionsBtn" class="btn-secondary">Settings & Configuration</button>
   </div>

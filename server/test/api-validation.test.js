@@ -1,8 +1,17 @@
-import test from "node:test";
+import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import app from "../server.js";
 import { AssessmentResponseSchema } from "../schemas.js";
+import { setupStandardMocks, teardownStandardMocks } from "./test-helpers.js";
+
+beforeEach(() => {
+  setupStandardMocks();
+});
+
+afterEach(() => {
+  teardownStandardMocks();
+});
 
 function dispatchRequest(app, { method, url, body }) {
   return new Promise((resolve) => {

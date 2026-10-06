@@ -1,7 +1,7 @@
 /**
  * ExamAssist AI - Verification Pass & Contradiction Detection
- * Classifies each claim as SUPPORTED, PARTIALLY_SUPPORTED, INFERRED, CONTRADICTED, or UNSUPPORTED.
- * Identifies contradictory sources and isolates unsupported assertions.
+ * Verifies answer claims against genuine retrieved sources.
+ * If verification did not run or failed, status is UNVERIFIED. Never defaults to SUPPORTED.
  */
 
 import { defaultAIClient } from "../aiClient.js";
@@ -21,6 +21,7 @@ export async function runVerificationPass({
   sources = [],
   aiClient = defaultAIClient
 }) {
+  // If no sources exist, verification cannot confirm claims
   if (!sources || sources.length === 0) {
     return {
       status: "UNVERIFIED",
@@ -33,31 +34,34 @@ export async function runVerificationPass({
   }
 
   const sourcesText = formatSourcesText(sources);
-  const answerToVerify = `${directAnswer}\n${explanation}`.trim();
+  const answerToVerify = `${typeof directAnswer === "object" ? (directAnswer.text || directAnswer.option || "") : directAnswer}\n${explanation}`.trim();
 
-  // 1. Contradiction check between sources
   let hasContradiction = false;
   let contradictionExplanation = "";
   const conflictingList = [];
+  const supportedList = [];
+  const unsupportedList = [];
 
+  // 1. Contradiction check between sources if multiple sources are present
   if (sources.length >= 2) {
-    const prompt = CONTRADICTION_DETECTION_PROMPT
+    const conflictPrompt = CONTRADICTION_DETECTION_PROMPT
       .replace("{{QUESTION}}", question)
       .replace("{{SOURCES}}", sourcesText);
 
     try {
-      const result = await aiClient.generateJson({
-        systemPrompt: "You are the contradiction-detection engine for ExamAssist AI.",
-        userPrompt: prompt,
-        fallbackData: null
+      const conflictResult = await aiClient.generateJson({
+        systemPrompt: "You are the contradiction-detection engine for ExamAssist AI. Compare sources for factual disagreements.",
+        userPrompt: conflictPrompt
       });
 
-      if (result && result.status === "CONFLICTING_EVIDENCE") {
+      if (conflictResult && conflictResult.status === "CONFLICTING_EVIDENCE") {
         hasContradiction = true;
-        contradictionExplanation = result.explanation || "Sources exhibit active disagreement on core premises.";
+        contradictionExplanation = conflictResult.explanation || "Sources exhibit active disagreement on core premises.";
         conflictingList.push(contradictionExplanation);
       }
-    } catch {}
+    } catch (err) {
+      console.warn("[VerificationPass] Contradiction check skipped:", err.message);
+    }
   }
 
   // 2. Claim-by-claim verification pass
@@ -66,17 +70,15 @@ export async function runVerificationPass({
     .replace("{{ANSWER}}", answerToVerify)
     .replace("{{SOURCES}}", sourcesText);
 
-  const supportedList = [];
-  const unsupportedList = [];
-
+  let verificationRan = false;
   try {
     const vResult = await aiClient.generateJson({
-      systemPrompt: "You are the evidence verification engine for ExamAssist AI.",
-      userPrompt: verifyPrompt,
-      fallbackData: null
+      systemPrompt: "You are the evidence verification engine for ExamAssist AI. Verify each claim strictly against the provided sources.",
+      userPrompt: verifyPrompt
     });
 
-    if (vResult && Array.isArray(vResult.claims)) {
+    if (vResult && Array.isArray(vResult.claims) && vResult.claims.length > 0) {
+      verificationRan = true;
       for (const c of vResult.claims) {
         if (c.status === "SUPPORTED" || c.status === "PARTIALLY_SUPPORTED" || c.status === "INFERRED") {
           supportedList.push(c.claim);
@@ -87,30 +89,61 @@ export async function runVerificationPass({
         }
       }
     }
-  } catch {}
-
-  // Deterministic fallbacks
-  if (supportedList.length === 0 && !hasContradiction) {
-    supportedList.push("Core answer directly verified against authoritative academic documentation");
+  } catch (err) {
+    console.warn("[VerificationPass] Claim verification error:", err.message);
   }
 
-  let status = "SUPPORTED";
+  // Determine final verification status
+  if (!verificationRan) {
+    return {
+      status: "UNVERIFIED",
+      supported: [],
+      conflicting: conflictingList,
+      unsupported: ["Verification could not be completed."],
+      hasContradiction,
+      contradictionExplanation
+    };
+  }
+
   if (hasContradiction || conflictingList.length > 0) {
-    status = "CONFLICTING";
-  } else if (sources.length === 0) {
-    status = "UNVERIFIED";
-  } else if (unsupportedList.length > 0 && supportedList.length === 0) {
-    status = "UNVERIFIED";
-  } else if (unsupportedList.length > 0) {
-    status = "PARTIALLY_SUPPORTED";
+    return {
+      status: "CONFLICTING",
+      supported: supportedList,
+      conflicting: conflictingList,
+      unsupported: unsupportedList,
+      hasContradiction: true,
+      contradictionExplanation: contradictionExplanation || conflictingList.join("; ")
+    };
+  }
+
+  if (supportedList.length > 0 && unsupportedList.length === 0) {
+    return {
+      status: "SUPPORTED",
+      supported: supportedList,
+      conflicting: [],
+      unsupported: [],
+      hasContradiction: false,
+      contradictionExplanation: ""
+    };
+  }
+
+  if (supportedList.length > 0 && unsupportedList.length > 0) {
+    return {
+      status: "PARTIALLY_SUPPORTED",
+      supported: supportedList,
+      conflicting: [],
+      unsupported: unsupportedList,
+      hasContradiction: false,
+      contradictionExplanation: ""
+    };
   }
 
   return {
-    status,
-    supported: supportedList,
-    conflicting: conflictingList,
-    unsupported: unsupportedList,
-    hasContradiction,
-    contradictionExplanation
+    status: "UNVERIFIED",
+    supported: [],
+    conflicting: [],
+    unsupported: unsupportedList.length > 0 ? unsupportedList : ["Evidence is insufficient to confirm claims."],
+    hasContradiction: false,
+    contradictionExplanation: ""
   };
 }
