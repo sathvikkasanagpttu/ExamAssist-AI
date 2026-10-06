@@ -1,0 +1,584 @@
+/* ==========================================================================
+   ExamAssist AI - Content Script Styles
+   Polished, production-quality assessment copilot UI (Dark & Light themes)
+   ========================================================================== */
+
+/* Floating Action Button near user text selection */
+#examai-floating-btn {
+  position: absolute;
+  z-index: 2147483646;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: #1e293b;
+  color: #f8fafc;
+  border: 1px solid #3b82f6;
+  border-radius: 20px;
+  padding: 7px 14px;
+  font: 12.5px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-weight: 600;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(59, 130, 246, 0.3);
+  cursor: pointer;
+  user-select: none;
+  animation: examai-fade-in 0.15s ease-out;
+  transition: transform 0.1s ease, background 0.15s ease;
+}
+
+#examai-floating-btn:hover {
+  background: #2563eb;
+  transform: translateY(-1px) scale(1.02);
+}
+
+#examai-floating-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: #60a5fa;
+}
+
+#examai-floating-btn:hover svg {
+  fill: #ffffff;
+}
+
+@keyframes examai-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ==========================================================================
+   Main On-Page Assessment Copilot Panel
+   ========================================================================== */
+#examai-panel {
+  position: fixed;
+  z-index: 2147483647;
+  top: 24px;
+  right: 24px;
+  width: 480px;
+  min-width: 340px;
+  max-width: calc(100vw - 32px);
+  height: 640px;
+  min-height: 280px;
+  max-height: 90vh;
+  resize: both;
+  display: flex;
+  flex-direction: column;
+  background: #0f172a;
+  color: #f8fafc;
+  border: 1px solid #334155;
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  font: 13.5px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+#examai-panel * {
+  box-sizing: border-box;
+}
+
+/* ==========================================================================
+   Light Theme Override
+   ========================================================================== */
+#examai-panel.examai-theme-light {
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+#examai-panel.examai-theme-light .examai-head {
+  background: #f1f5f9;
+  border-bottom: 1px solid #cbd5e1;
+}
+
+#examai-panel.examai-theme-light .examai-title-wrap strong {
+  color: #0f172a;
+}
+
+#examai-panel.examai-theme-light .examai-question {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #334155;
+}
+
+#examai-panel.examai-theme-light .examai-direct-card {
+  background: #eff6ff;
+  border-color: #3b82f6;
+}
+
+#examai-panel.examai-theme-light .examai-direct-text {
+  color: #1e3a8a;
+}
+
+#examai-panel.examai-theme-light .examai-explanation {
+  color: #334155;
+}
+
+#examai-panel.examai-theme-light .examai-notes-box {
+  background: #f8fafc;
+  border-left-color: #2563eb;
+  color: #334155;
+}
+
+#examai-panel.examai-theme-light .examai-option-item {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #334155;
+}
+
+#examai-panel.examai-theme-light .examai-option-item.recommended {
+  background: #eff6ff;
+  border-color: #2563eb;
+  color: #1e3a8a;
+}
+
+#examai-panel.examai-theme-light .examai-source-card {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+#examai-panel.examai-theme-light .examai-source-card a {
+  color: #1d4ed8;
+}
+
+#examai-panel.examai-theme-light .examai-btn-icon {
+  color: #64748b;
+}
+
+#examai-panel.examai-theme-light .examai-btn-icon:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+/* ==========================================================================
+   Minimized Floating Pill State
+   ========================================================================== */
+#examai-panel.examai-minimized {
+  width: auto !important;
+  max-width: 400px !important;
+  height: auto !important;
+  min-height: unset !important;
+  resize: none !important;
+  border-radius: 24px;
+  background: #1e293b;
+  border: 1px solid #3b82f6;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+#examai-panel.examai-minimized .examai-body,
+#examai-panel.examai-minimized .examai-footer-bar {
+  display: none !important;
+}
+
+#examai-panel.examai-minimized .examai-head {
+  padding: 8px 14px;
+  background: transparent;
+  border-bottom: 0;
+}
+
+/* ==========================================================================
+   Header & Navigation
+   ========================================================================== */
+.examai-head {
+  padding: 12px 16px;
+  border-bottom: 1px solid #334155;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #1e293b;
+  user-select: none;
+  cursor: grab;
+  flex-shrink: 0;
+}
+
+.examai-head:active {
+  cursor: grabbing;
+}
+
+.examai-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.examai-title-wrap strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: -0.01em;
+}
+
+.examai-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: #334155;
+  color: #93c5fd;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Mode Badges */
+.examai-mode-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.examai-mode-practice {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+}
+
+.examai-mode-authorized {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.examai-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.examai-btn-icon {
+  background: none;
+  border: 0;
+  color: #94a3b8;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  line-height: 1;
+  transition: all 0.15s ease;
+}
+
+.examai-btn-icon:hover {
+  background: #334155;
+  color: #f8fafc;
+}
+
+/* ==========================================================================
+   Panel Body & Scrollable Content
+   ========================================================================== */
+.examai-body {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.examai-body::-webkit-scrollbar {
+  width: 6px;
+}
+.examai-body::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 3px;
+}
+
+.examai-label {
+  margin-top: 14px;
+  margin-bottom: 5px;
+  color: #94a3b8;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.examai-question {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #cbd5e1;
+  font-size: 12.5px;
+  max-height: 90px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+/* Direct Answer Card */
+.examai-direct-card {
+  margin-top: 8px;
+  padding: 14px;
+  background: #172554;
+  border: 1px solid #2563eb;
+  border-radius: 10px;
+}
+
+.examai-direct-title {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #93c5fd;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+}
+
+.examai-direct-text {
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+/* Confidence Badges */
+.examai-confidence-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.examai-conf-high {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.4);
+}
+
+.examai-conf-medium {
+  background: rgba(234, 179, 8, 0.15);
+  color: #facc15;
+  border: 1px solid rgba(234, 179, 8, 0.4);
+}
+
+.examai-conf-low,
+.examai-conf-unverified {
+  background: rgba(148, 163, 184, 0.15);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+}
+
+/* Option Analysis List */
+.examai-options-list {
+  margin: 6px 0 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.examai-option-item {
+  padding: 9px 12px;
+  margin-bottom: 6px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.examai-option-item.recommended {
+  background: #172554;
+  border-color: #2563eb;
+  color: #ffffff;
+}
+
+.examai-opt-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+}
+
+.examai-opt-analysis {
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.examai-option-badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #2563eb;
+  color: #ffffff;
+  text-transform: uppercase;
+}
+
+/* Reasoning Steps Accordion */
+.examai-steps-list {
+  margin: 6px 0 0 0;
+  padding-left: 20px;
+  color: #cbd5e1;
+  font-size: 12.5px;
+}
+
+.examai-steps-list li {
+  margin-bottom: 5px;
+}
+
+/* Explanation */
+.examai-explanation {
+  margin-top: 6px;
+  color: #cbd5e1;
+  line-height: 1.55;
+  font-size: 12.5px;
+  white-space: pre-wrap;
+}
+
+/* Notes & Warnings */
+.examai-notes-box {
+  margin-top: 6px;
+  padding: 10px 12px;
+  background: #1e293b;
+  border-left: 3px solid #3b82f6;
+  border-radius: 0 8px 8px 0;
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.examai-conflict-alert {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 8px;
+  color: #fca5a5;
+  font-size: 12px;
+}
+
+/* Clickable Source Cards */
+.examai-sources-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.examai-source-card {
+  padding: 8px 10px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  font-size: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.examai-source-card a {
+  color: #93c5fd;
+  text-decoration: none;
+  font-weight: 500;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.examai-source-card a:hover {
+  text-decoration: underline;
+}
+
+.examai-source-meta {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 10.5px;
+  color: #94a3b8;
+}
+
+.examai-source-score {
+  color: #4ade80;
+  font-weight: 700;
+}
+
+/* ==========================================================================
+   Footer Action Bar
+   ========================================================================== */
+.examai-footer-bar {
+  padding: 10px 16px;
+  border-top: 1px solid #334155;
+  display: flex;
+  gap: 8px;
+  background: #1e293b;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.examai-btn-action {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #475569;
+  background: #0f172a;
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.examai-btn-action:hover {
+  background: #334155;
+  border-color: #64748b;
+}
+
+/* ==========================================================================
+   Loading Shimmer Skeleton
+   ========================================================================== */
+.examai-skeleton-container {
+  padding: 16px 4px;
+}
+
+.examai-skeleton-bar {
+  height: 14px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+  background-size: 200% 100%;
+  animation: examai-shimmer 1.5s infinite;
+  margin-bottom: 10px;
+}
+
+@keyframes examai-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ==========================================================================
+   Confirmation Modal
+   ========================================================================== */
+.examai-modal-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(15, 23, 42, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 10;
+  border-radius: 16px;
+}
+
+.examai-modal-box {
+  background: #1e293b;
+  border: 1px solid #3b82f6;
+  border-radius: 12px;
+  padding: 18px;
+  max-width: 380px;
+  color: #f8fafc;
+  font-size: 13px;
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.5);
+}
+
+.examai-modal-btns {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}

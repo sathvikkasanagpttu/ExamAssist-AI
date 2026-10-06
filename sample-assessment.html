@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ExamAssist AI — Assessment Practice & Evaluation Portal</title>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --primary: #4f46e5;
+      --primary-hover: #4338ca;
+      --accent: #0284c7;
+      --code-bg: #0f172a;
+      --code-fg: #f1f5f9;
+      --badge-bg: #e0e7ff;
+      --badge-fg: #3730a3;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 32px 16px;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    header {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px 32px;
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    h1 {
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    p.subtitle {
+      color: var(--text-muted);
+      font-size: 15px;
+    }
+
+    .banner {
+      margin-top: 16px;
+      padding: 14px 18px;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      font-size: 14px;
+      color: #1e40af;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .banner-icon {
+      font-size: 20px;
+      line-height: 1;
+    }
+
+    .question-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px 28px;
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+      transition: border-color 0.15s ease;
+    }
+
+    .question-card:hover {
+      border-color: #cbd5e1;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+
+    .q-number {
+      font-weight: 700;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--primary);
+    }
+
+    .badge {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      background: var(--badge-bg);
+      color: var(--badge-fg);
+    }
+
+    .badge.canvas {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .badge.moodle {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .badge.generic {
+      background: #e0f2fe;
+      color: #0369a1;
+    }
+
+    .q-prompt {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 16px;
+    }
+
+    .options-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .option-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 15px;
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.15s ease;
+    }
+
+    .option-item:hover {
+      background: #f1f5f9;
+      border-color: #cbd5e1;
+    }
+
+    .option-item input {
+      accent-color: var(--primary);
+      width: 16px;
+      height: 16px;
+    }
+
+    pre code {
+      display: block;
+      background: var(--code-bg);
+      color: var(--code-fg);
+      padding: 14px 18px;
+      border-radius: 8px;
+      font-family: "SF Mono", "Monaco", "Inconsolata", "Fira Code", monospace;
+      font-size: 13.5px;
+      line-height: 1.5;
+      overflow-x: auto;
+      margin-bottom: 16px;
+    }
+
+    .formula-box {
+      background: #f1f5f9;
+      border-left: 4px solid var(--accent);
+      padding: 12px 18px;
+      border-radius: 0 8px 8px 0;
+      font-family: serif;
+      font-size: 17px;
+      margin-bottom: 14px;
+    }
+
+    table.data-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 16px;
+      font-size: 14px;
+    }
+
+    table.data-table th,
+    table.data-table td {
+      border: 1px solid var(--border);
+      padding: 8px 12px;
+      text-align: left;
+    }
+
+    table.data-table th {
+      background: #f1f5f9;
+      font-weight: 600;
+    }
+
+    .answer-textarea {
+      width: 100%;
+      min-height: 90px;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+      resize: vertical;
+    }
+
+    footer {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 13px;
+      margin-top: 40px;
+      padding-bottom: 24px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>ExamAssist AI Practice Portal</h1>
+      <p class="subtitle">Simulated Academic Assessment Portal for Extension Testing & Verification</p>
+      
+      <div class="banner">
+        <span class="banner-icon">💡</span>
+        <div>
+          <strong>How to test ExamAssist AI on this page:</strong>
+          <br>
+          1. Ensure the ExamAssist extension is loaded in Chrome and the backend server is running on <code>http://localhost:8787</code>.
+          <br>
+          2. Highlight any question text below, click the floating <strong>"ExamAssist"</strong> button, or press <kbd>Ctrl+Shift+E</kbd> (<kbd>Cmd+Shift+E</kbd> on Mac).
+          <br>
+          3. Test both <em>Practice Mode</em> and <em>Authorized Assessment Mode</em>. Observe full claim verification and source citations.
+        </div>
+      </div>
+    </header>
+
+    <!-- QUESTION 1: MCQ (Biology) - Generic Adapter -->
+    <div class="question-card" id="q1">
+      <div class="card-header">
+        <span class="q-number">Question 1</span>
+        <span class="badge generic">Generic Adapter • MCQ</span>
+      </div>
+      <div class="q-prompt">
+        Which cellular organelle is primarily responsible for generating the majority of cellular ATP via oxidative phosphorylation during aerobic respiration?
+      </div>
+      <div class="options-list">
+        <label class="option-item">
+          <input type="radio" name="q1" value="A">
+          <span>A) Ribosome</span>
+        </label>
+        <label class="option-item">
+          <input type="radio" name="q1" value="B">
+          <span>B) Mitochondria</span>
+        </label>
+        <label class="option-item">
+          <input type="radio" name="q1" value="C">
+          <span>C) Endoplasmic Reticulum</span>
+        </label>
+        <label class="option-item">
+          <input type="radio" name="q1" value="D">
+          <span>D) Golgi Apparatus</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- QUESTION 2: Multi-Select (Physics / Thermodynamics) - Canvas LMS Format -->
+    <div class="question-card question_holder" id="question_501">
+      <div class="card-header">
+        <span class="q-number">Question 2</span>
+        <span class="badge canvas">Canvas LMS Adapter • Multi-Select</span>
+      </div>
+      <div class="question_text user_content">
+        <p class="q-prompt">
+          Which of the following statements regarding the Second Law of Thermodynamics and thermodynamic entropy are correct? (Select all that apply)
+        </p>
+      </div>
+      <div class="answers">
+        <div class="options-list">
+          <label class="option-item answer_label">
+            <input type="checkbox" name="q2_a">
+            <span>A) The total entropy of an isolated system cannot decrease over time.</span>
+          </label>
+          <label class="option-item answer_label">
+            <input type="checkbox" name="q2_b">
+            <span>B) Heat can spontaneously flow from a colder body to a hotter body without external work.</span>
+          </label>
+          <label class="option-item answer_label">
+            <input type="checkbox" name="q2_c">
+            <span>C) Reversible thermodynamic processes keep the net entropy of the universe constant.</span>
+          </label>
+          <label class="option-item answer_label">
+            <input type="checkbox" name="q2_d">
+            <span>D) A perpetual motion machine of the second kind is theoretically possible under ideal friction-free conditions.</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- QUESTION 3: Numerical / Math (Physics / Calculus) - Moodle LMS Format -->
+    <div class="question-card que multichoice" id="q3_moodle">
+      <div class="card-header">
+        <span class="q-number">Question 3</span>
+        <span class="badge moodle">Moodle Adapter • Numerical</span>
+      </div>
+      <div class="formulation">
+        <div class="qtext">
+          <p class="q-prompt">
+            An object with mass <strong>m = 4.0 kg</strong> accelerates uniformly from rest to a final velocity of <strong>v = 15.0 m/s</strong> over a displacement of <strong>d = 30.0 meters</strong>.
+          </p>
+          <div class="formula-box">
+            Kinetic Energy Formula: <em>E<sub>k</sub> = ½ · m · v²</em><br>
+            Work-Energy Theorem: <em>W = F · d = ΔE<sub>k</sub></em>
+          </div>
+          <p>
+            Find the kinetic energy acquired by the object and calculate the magnitude of the net horizontal force <em>F</em> exerted on the object during this displacement.
+          </p>
+        </div>
+        <div class="options-list" style="margin-top: 14px;">
+          <label class="option-item">
+            <input type="radio" name="q3" value="A">
+            <span>A) Kinetic Energy = 450 J; Net Force = 15.0 N</span>
+          </label>
+          <label class="option-item">
+            <input type="radio" name="q3" value="B">
+            <span>B) Kinetic Energy = 900 J; Net Force = 30.0 N</span>
+          </label>
+          <label class="option-item">
+            <input type="radio" name="q3" value="C">
+            <span>C) Kinetic Energy = 450 J; Net Force = 30.0 N</span>
+          </label>
+          <label class="option-item">
+            <input type="radio" name="q3" value="D">
+            <span>D) Kinetic Energy = 300 J; Net Force = 10.0 N</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- QUESTION 4: Coding & Debugging (Computer Science - Python) -->
+    <div class="question-card" id="q4">
+      <div class="card-header">
+        <span class="q-number">Question 4</span>
+        <span class="badge generic">Generic Adapter • Code Debugging</span>
+      </div>
+      <div class="q-prompt">
+        Identify the bug in the following Python binary search implementation and determine under which condition an <code>IndexError</code> or infinite loop occurs:
+      </div>
+      <pre><code>def binary_search(arr, target):
+    low = 0
+    high = len(arr)  # Line 3
+
+    while low <= high:  # Line 5
+        mid = (low + high) // 2
+        if arr[mid] == target:
+            return mid
+        elif arr[mid] < target:
+            low = mid + 1
+        else:
+            high = mid
+    return -1</code></pre>
+      <div class="options-list">
+        <label class="option-item">
+          <input type="radio" name="q4" value="A">
+          <span>A) Line 3 should initialize <code>high = len(arr) - 1</code>, otherwise <code>arr[mid]</code> can cause an <code>IndexError</code> when <code>target > all elements</code>.</span>
+        </label>
+        <label class="option-item">
+          <input type="radio" name="q4" value="B">
+          <span>B) Line 5 should be <code>while low == high</code>.</span>
+        </label>
+        <label class="option-item">
+          <input type="radio" name="q4" value="C">
+          <span>C) Integer overflow always occurs at <code>mid = (low + high) // 2</code> in modern Python 3.</span>
+        </label>
+        <label class="option-item">
+          <input type="radio" name="q4" value="D">
+          <span>D) The function works correctly for all inputs without any modifications.</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- QUESTION 5: SQL Query Optimization & Aggregation -->
+    <div class="question-card" id="q5">
+      <div class="card-header">
+        <span class="q-number">Question 5</span>
+        <span class="badge generic">Generic Adapter • SQL</span>
+      </div>
+      <div class="q-prompt">
+        Given an employee table with schema <code>employees(emp_id, emp_name, department_id, salary)</code>, which SQL query correctly retrieves the department IDs and average salaries for only those departments with more than 5 employees and an average salary greater than 75,000?
+      </div>
+      <pre><code>-- Example schema preview:
+CREATE TABLE employees (
+    emp_id INT PRIMARY KEY,
+    emp_name VARCHAR(100),
+    department_id INT,
+    salary DECIMAL(10, 2)
+);</code></pre>
+      <div class="options-list">
+        <label class="option-item">
+          <input type="radio" name="q5" value="A">
+          <span>A) <code>SELECT department_id, AVG(salary) FROM employees WHERE COUNT(*) > 5 AND salary > 75000 GROUP BY department_id;</code></span>
+        </label>
+        <label class="option-item">
+          <input type="radio" name="q5" value="B">
+          <span>B) <code>SELECT department_id, AVG(salary) FROM employees GROUP BY department_id HAVING COUNT(*) > 5 AND AVG(salary) > 75000;</code></span>
+        </label>
+        <label class="option-item">
+          <input type="radio" name="q5" value="C">
+          <span>C) <code>SELECT department_id, AVG(salary) FROM employees HAVING COUNT(*) > 5 WHERE AVG(salary) > 75000;</code></span>
+        </label>
+        <label class="option-item">
+          <input type="radio" name="q5" value="D">
+          <span>D) <code>SELECT department_id, MEAN(salary) FROM employees GROUP BY department_id WHERE COUNT(emp_id) > 5;</code></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- QUESTION 6: Table-Based Data Interpretation (Chemistry Kinetics) -->
+    <div class="question-card" id="q6">
+      <div class="card-header">
+        <span class="q-number">Question 6</span>
+        <span class="badge generic">Generic Adapter • Data Table</span>
+      </div>
+      <div class="q-prompt">
+        The table below shows initial rate data for the reaction <code>A + B → Products</code> at 298 K:
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Experiment</th>
+            <th>[A] (mol/L)</th>
+            <th>[B] (mol/L)</th>
+            <th>Initial Rate (mol · L⁻¹ · s⁻¹)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td>0.10</td>
+            <td>0.10</td>
+            <td>2.0 × 10⁻³</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>0.20</td>
+            <td>0.10</td>
+            <td>4.0 × 10⁻³</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>0.10</td>
+            <td>0.20</td>
+            <td>8.0 × 10⁻³</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="q-prompt">
+        What is the overall reaction order and the rate law for this reaction?
+      </p>
+      <div class="options-list">
+        <label class="option-item">
+          <input type="radio" name="q6" value="A">
+          <span>A) Overall Order: 2; Rate = k[A][B]</span>
+        </label>
+        <label class="option-item">
+          <input type="radio" name="q6" value="B">
+          <span>B) Overall Order: 3; Rate = k[A][B]²</span>
+        </label>
+        <label class="option-item">
+          <input type="radio" name="q6" value="C">
+          <span>C) Overall Order: 1; Rate = k[A]</span>
+        </label>
+        <label class="option-item">
+          <input type="radio" name="q6" value="D">
+          <span>D) Overall Order: 4; Rate = k[A]²[B]²</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- QUESTION 7: Conceptual / Short Answer (Economics) -->
+    <div class="question-card" id="q7">
+      <div class="card-header">
+        <span class="q-number">Question 7</span>
+        <span class="badge generic">Generic Adapter • Conceptual</span>
+      </div>
+      <div class="q-prompt">
+        Explain the fundamental difference between Absolute Advantage and Comparative Advantage in international trade theory according to David Ricardo, and explain why mutually beneficial trade can still occur when one nation holds an absolute advantage in all goods.
+      </div>
+      <textarea class="answer-textarea" placeholder="Type or select conceptual answer explanation here..."></textarea>
+    </div>
+
+    <footer>
+      ExamAssist AI Copilot • Academic Study & Practice Environment • Evidence-First Architecture
+    </footer>
+  </div>
+</body>
+</html>

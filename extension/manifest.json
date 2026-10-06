@@ -1,0 +1,59 @@
+{
+  "manifest_version": 3,
+  "name": "ExamAssist AI — Study & Assessment Copilot",
+  "version": "2.1.0",
+  "description": "An evidence-first academic study assistant that captures questions and options, researches verified sources, and displays answers directly on assessment pages.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "contextMenus"
+  ],
+  "commands": {
+    "analyze_question": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+E",
+        "mac": "Command+Shift+E"
+      },
+      "description": "Analyze selected question with ExamAssist AI"
+    }
+  },
+  "host_permissions": [
+    "http://localhost:*/*",
+    "http://127.0.0.1:*/*"
+  ],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "ExamAssist AI Copilot",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": [
+        "extractors/BaseExtractor.js",
+        "extractors/GenericExtractor.js",
+        "extractors/MoodleAdapter.js",
+        "extractors/CanvasAdapter.js",
+        "extractors/CustomPortalAdapter.js",
+        "extractors/ExtractionManager.js",
+        "content.js"
+      ],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "options.html"
+}
