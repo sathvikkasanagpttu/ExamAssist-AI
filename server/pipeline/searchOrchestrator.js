@@ -30,6 +30,19 @@ export async function generateSearchQueries(question, subject, aiClient = defaul
   const cached = globalCache.get(cacheKey);
   if (cached) return cached;
 
+  // When no search API key is configured, use fast deterministic queries to conserve LLM quota
+  if (!hasSearchApiKey()) {
+    const cleanQ = question.replace(/^(What is|Why does|How do|Explain|Calculate|Find|Which of the following)\s+/i, "").slice(0, 100);
+    const queries = [
+      cleanQ,
+      `${cleanQ} ${subject || "academic"} principles definition`,
+      `${cleanQ} peer reviewed study university documentation`,
+      `${cleanQ} empirical consensus`
+    ];
+    globalCache.set(cacheKey, queries);
+    return queries;
+  }
+
   const prompt = SEARCH_QUERY_GENERATION_PROMPT.replace("{{QUESTION}}", question);
 
   try {

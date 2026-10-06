@@ -130,41 +130,78 @@ export class AIClient {
       { role: "user", content: userPrompt }
     ];
 
-    try {
-      const response = await this.openai.chat.completions.create(
-        {
-          model: this.model,
-          messages,
-          temperature,
-          ...(json ? { response_format: { type: "json_object" } } : {})
-        },
-        {
-          signal: AbortSignal.timeout(timeoutMs)
+    // Build candidate models list for automatic fallback on 429 quota or 503 errors
+    const modelsToTry = [this.model];
+    if (this.baseURL?.includes("googleapis.com") || this.model.startsWith("gemini-")) {
+      const geminiFallbacks = [
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-flash-lite",
+        "gemini-flash-latest",
+        "gemini-3.5-flash"
+      ];
+      for (const fb of geminiFallbacks) {
+        if (!modelsToTry.includes(fb)) modelsToTry.push(fb);
+      }
+    }
+
+    let lastError = null;
+
+    for (let i = 0; i < modelsToTry.length; i++) {
+      const currentModel = modelsToTry[i];
+      const hasNext = i < modelsToTry.length - 1;
+
+      try {
+        const response = await this.openai.chat.completions.create(
+          {
+            model: currentModel,
+            messages,
+            temperature,
+            ...(json ? { response_format: { type: "json_object" } } : {})
+          },
+          {
+            signal: AbortSignal.timeout(timeoutMs)
+          }
+        );
+
+        const content = response.choices?.[0]?.message?.content;
+        if (typeof content !== "string") {
+          throw new AIUnavailableError("Empty completion content received from AI provider");
         }
-      );
+        return content;
+      } catch (err) {
+        if (err instanceof AIError && !(err instanceof AIRateLimitError) && !(err instanceof AIUnavailableError)) {
+          throw err;
+        }
 
-      const content = response.choices?.[0]?.message?.content;
-      if (typeof content !== "string") {
-        throw new AIUnavailableError("Empty completion content received from AI provider");
-      }
-      return content;
-    } catch (err) {
-      if (err instanceof AIError) throw err;
+        const msg = String(err.message || "").toLowerCase();
+        const status = err.status || err.statusCode;
 
-      const msg = String(err.message || "").toLowerCase();
-      const status = err.status || err.statusCode;
+        if (status === 401 || status === 403 || msg.includes("invalid api key") || msg.includes("incorrect api key")) {
+          throw new AIConfigError(`Invalid API key: ${err.message}`);
+        }
 
-      if (status === 401 || status === 403 || msg.includes("invalid api key") || msg.includes("incorrect api key")) {
-        throw new AIConfigError(`Invalid API key: ${err.message}`);
-      }
-      if (status === 429 || msg.includes("rate limit") || msg.includes("quota exceeded") || msg.includes("insufficient_quota")) {
-        throw new AIRateLimitError(err.message);
-      }
-      if (err.name === "AbortError" || err.name === "TimeoutError" || msg.includes("timeout") || msg.includes("etimedout")) {
-        throw new AITimeoutError(err.message);
-      }
+        const isRateLimit = status === 429 || msg.includes("rate limit") || msg.includes("quota exceeded") || msg.includes("insufficient_quota") || msg.includes("429");
+        const isUnavailable = status === 503 || msg.includes("high demand") || msg.includes("unavailable") || msg.includes("overloaded");
 
-      throw new AIUnavailableError(err.message);
+        if ((isRateLimit || isUnavailable) && hasNext) {
+          console.warn(`[AIClient] Model ${currentModel} returned ${status || "error"} (${isRateLimit ? "rate limit / quota" : "unavailable"}). Falling back to ${modelsToTry[i + 1]}...`);
+          lastError = err;
+          continue;
+        }
+
+        if (isRateLimit) {
+          throw new AIRateLimitError(err.message);
+        }
+        if (err.name === "AbortError" || err.name === "TimeoutError" || msg.includes("timeout") || msg.includes("etimedout")) {
+          throw new AITimeoutError(err.message);
+        }
+
+        throw new AIUnavailableError(err.message);
+      }
+    }
+
+    if (lastError) {
+      throw new AIRateLimitError(lastError.message);
     }
   }
 

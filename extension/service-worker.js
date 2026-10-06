@@ -9,6 +9,7 @@ chrome.runtime.onInstalled.addListener(async () => {
     apiBase: "http://localhost:8787",
     autoAnswerOnCopy: false,
     showFloatingButton: true,
+    enableAllSites: true,
     autoDetectOptions: true
   });
 

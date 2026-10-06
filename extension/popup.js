@@ -21,7 +21,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     apiBase: "http://localhost:8787",
     autoAnswerOnCopy: false,
     showFloatingButton: true,
-    enableAllSites: false,
+    enableAllSites: true,
     allowedSites: ["localhost", "127.0.0.1"]
   });
 

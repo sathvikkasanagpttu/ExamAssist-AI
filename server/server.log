@@ -1,0 +1,8 @@
+{"timestamp":"2026-10-06T12:23:25.455Z","service":"ExamAssist-Backend","level":"INFO","message":"ExamAssist AI Server running on port 8787","port":8787}
+ExamAssist AI Server active on http://localhost:8787
+{"timestamp":"2026-10-06T12:23:48.803Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"Computer Science","difficulty":"Intermediate"}
+{"timestamp":"2026-10-06T12:24:07.230Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":18431}
+{"timestamp":"2026-10-06T12:25:36.774Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"Computer Science","difficulty":"Introductory"}
+{"timestamp":"2026-10-06T12:25:42.080Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":5312}
+{"timestamp":"2026-10-06T12:26:06.929Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"Computer Science","difficulty":"Introductory"}
+{"timestamp":"2026-10-06T12:26:11.410Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":4483}

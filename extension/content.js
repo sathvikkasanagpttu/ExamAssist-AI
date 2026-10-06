@@ -47,7 +47,7 @@
 
   async function isSiteAllowed() {
     const cfg = await getCfg({
-      enableAllSites: false,
+      enableAllSites: true,
       allowedSites: ["localhost", "127.0.0.1"]
     });
     if (cfg.enableAllSites) return true;
@@ -696,11 +696,20 @@
       const panel = document.getElementById(PANEL_ID);
       if (panel) {
         const isNotConfigured = err.code === "AI_NOT_CONFIGURED" || String(err.message).includes("OPENAI_API_KEY");
+        const isRateLimited = err.code === "AI_RATE_LIMITED" || String(err.message).includes("429") || String(err.message).includes("quota");
         panel.querySelector(".examai-body").innerHTML = `
           ${isNotConfigured ? `
             <div class="examai-config-banner">
               <strong>⚠️ AI Key Not Configured</strong>
               Please add <code>OPENAI_API_KEY</code> in <code>server/.env</code> and restart the backend server to enable AI analysis.
+            </div>
+          ` : isRateLimited ? `
+            <div style="padding:16px;background:#451a03;border:1px solid #b45309;border-radius:8px;color:#fef3c7;font-size:12.5px;">
+              <strong style="display:block;margin-bottom:4px;color:#f59e0b;">⏳ AI Provider Rate Limit (429)</strong>
+              Google Gemini rate limit or quota reached on the active model. The server rotates through backup models automatically.
+              <div style="margin-top:8px;font-size:11.5px;color:#fde68a;">
+                Please wait a moment and click <strong>🔄 Re-Analyze</strong>.
+              </div>
             </div>
           ` : `
             <div style="padding:16px;background:#451a1a;border:1px solid #7f1d1d;border-radius:8px;color:#fecaca;font-size:12.5px;">
