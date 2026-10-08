@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "tolerance": {
+    "accuracyPctPoints": 2,
+    "unverifiedWrongPctPoints": 2,
+    "calibrationPctPoints": 5
+  },
+  "runs": {
+    "a_single_pass:smoke:examassist-phase1-baseline": {
+      "datasetHash": "7fa188645d15d7a19d53a797891712708ade0d77e4fccdd6f2af4591e53a8f72",
+      "metrics": {
+        "accuracy": 19.07,
+        "unverifiedWrongAnswerRate": 100,
+        "calibration": {
+          "HIGH": { "total": 0, "correct": 0, "accuracy": null },
+          "MEDIUM": { "total": 0, "correct": 0, "accuracy": null },
+          "LOW": { "total": 0, "correct": 0, "accuracy": null },
+          "UNVERIFIED": { "total": 236, "correct": 45, "accuracy": 19.07 }
+        }
+      }
+    }
+  }
+}

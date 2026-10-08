@@ -9,7 +9,8 @@
     "lint": "node scripts/lint.mjs",
     "test": "node --test test/*.test.js",
     "eval": "node eval/runner.mjs",
-    "eval:smoke": "node eval/runner.mjs --smoke --limit 10"
+    "eval:smoke": "node eval/runner.mjs --smoke --limit 10",
+    "eval:gate": "node eval/gate.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",

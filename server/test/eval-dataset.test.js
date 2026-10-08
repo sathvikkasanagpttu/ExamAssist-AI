@@ -7,9 +7,11 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const rows = readFileSync(path.join(here, "../eval/dataset.jsonl"), "utf8")
   .split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
+const redteamRows = readFileSync(path.join(here, "../eval/redteam.jsonl"), "utf8")
+  .split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
 
 test("evaluation dataset has 150+ valid, diverse practice questions", () => {
-  assert.ok(rows.length >= 150);
+  assert.ok(rows.length >= 230);
   const required = ["id", "subject", "type", "question", "options", "answer", "difficulty", "source", "notes"];
   const ids = new Set();
   for (const row of rows) {
@@ -25,9 +27,23 @@ test("evaluation dataset has 150+ valid, diverse practice questions", () => {
   for (const type of ["MCQ", "MULTI_SELECT", "TRUE_FALSE", "NUMERICAL", "CODING", "SQL"]) {
     assert.ok(rows.some((row) => row.type === type), `missing type ${type}`);
   }
+  for (const type of ["MULTI_SELECT", "TRUE_FALSE", "NUMERICAL", "CODING", "SQL"]) {
+    assert.ok(rows.filter((row) => row.type === type).length >= 20, `need at least 20 ${type} questions`);
+  }
 });
 
-test("every needsReview dataset row is listed in REVIEW.md", () => {
-  const review = readFileSync(path.join(here, "../eval/REVIEW.md"), "utf8");
-  for (const row of rows.filter((item) => item.needsReview)) assert.match(review, new RegExp(row.id));
+test("evaluation dataset has no unresolved review rows", () => {
+  assert.equal(rows.filter((item) => item.needsReview).length, 0);
+});
+
+test("red team set has 40 adverse cases across each required category", () => {
+  assert.ok(redteamRows.length >= 40);
+  const categories = ["ambiguous", "missing_info", "false_premise", "contradictory_options", "contradictory_source", "impossible_calculation", "fake_citation_bait", "prompt_injection"];
+  for (const category of categories) {
+    assert.ok(redteamRows.some((row) => row.category === category), `missing red-team category ${category}`);
+  }
+  for (const row of redteamRows) {
+    assert.equal(row.expectedBehavior, "FLAG_OR_UNVERIFIED");
+    assert.ok(row.question.trim().length > 0);
+  }
 });

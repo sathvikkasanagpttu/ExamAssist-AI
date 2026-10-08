@@ -7,7 +7,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const files = [];
 async function collect(directory) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
-    if (entry.name === "node_modules" || entry.name === "eval" || entry.name === "sandbox") continue;
+    if (entry.name === "node_modules" || entry.name === "sandbox") continue;
     const fullPath = path.join(directory, entry.name);
     if (entry.isDirectory()) await collect(fullPath);
     else if (/\.(m?js)$/.test(entry.name)) files.push(fullPath);
