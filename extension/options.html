@@ -106,6 +106,10 @@
       border-radius: 8px;
       font-size: 13px;
     }
+    input[type="file"] { width: 100%; margin-top: 8px; color: #cbd5e1; }
+    .kb-doc-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid #334155; }
+    .kb-doc-meta { color: #94a3b8; font-size: 12px; }
+    .kb-doc-delete { background: #7f1d1d; color: #fee2e2; padding: 6px 10px; }
     .status-success {
       background: rgba(34, 197, 94, 0.15);
       border: 1px solid rgba(34, 197, 94, 0.4);
@@ -151,6 +155,17 @@
     </div>
 
     <div id="status"></div>
+  </div>
+
+  <div class="card" id="course-notes">
+    <h2 style="margin:0;font-size:18px;">Course Notes</h2>
+    <p>Add your own PDF, DOCX, Markdown, or text notes. ExamAssist searches only this browser profile's notes when answering its questions.</p>
+    <label for="kb-file">Upload a course document</label>
+    <input id="kb-file" type="file" accept=".pdf,.docx,.md,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/markdown,text/plain">
+    <button id="kb-upload" style="margin-top:12px;background:#2563eb;color:white;">Upload Notes</button>
+    <div id="kb-storage" class="kb-doc-meta" style="margin-top:14px;">Storage used: unavailable</div>
+    <div id="kb-documents" aria-live="polite" style="margin-top:8px;"></div>
+    <p class="kb-doc-meta">Privacy: Files and extracted text are stored by the backend under a random ID saved in this browser profile. Note text is used to create embeddings and retrieve relevant passages for that profile's questions; it is not written to application logs. Delete a document here to remove its stored chunks and vectors. Text may be sent to the AI provider configured on your backend for embeddings and answer generation.</p>
   </div>
 
   <script src="options.js"></script>

@@ -167,3 +167,8 @@ Every claim in the answer draft undergoes independent claim verification:
 - **Mode Indicator**: Persistent visual badge displaying **Practice Mode** or **Authorized Assessment Mode**.
 - **Ephemeral Session History**: Retains question queries during the active session; automatically cleared on close.
 - **Safe Clipboard Actions**: "Copy Answer" and "Copy Explanation" copy formatted markdown text to the user's clipboard.
+# Course Notes retrieval
+
+Course Notes are an optional layer alongside web evidence. The extension creates a random profile ID in `chrome.storage.local` and sends it as `X-Local-User-Id`; document rows and chunks are scoped to that ID. When Postgres/pgvector is configured and healthy, the backend extracts PDF/DOCX/Markdown/text, chunks text with page/heading metadata, creates batched embeddings, and stores full-text search vectors. Retrieval merges vector and full-text ranks with reciprocal-rank fusion, removes candidates below the configured threshold, and optionally reranks the candidates with the configured AI client. Matching passages enter the existing solve-first/evidence/tie-break flow as `course_notes` sources. No database URL means `ragEnabled:false`, and the core assessment service still starts.
+
+The profile ID is a local separation key for this single-user extension, not an authentication credential for a public multi-user server. Run the backend on a trusted local network or add authenticated user accounts before exposing it to untrusted clients.

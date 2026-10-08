@@ -20,6 +20,8 @@ Returns service operational health, uptime, and available pipeline capabilities.
   "service": "ExamAssist AI Assessment Copilot",
   "version": "2.1.0",
   "uptimeSeconds": 1420,
+  "aiConfigured": true,
+  "ragEnabled": false,
   "pipelineSteps": [
     "1. Question Extraction & Analysis",
     "2. Subject & Type Classification",
@@ -41,6 +43,19 @@ Returns service operational health, uptime, and available pipeline capabilities.
   }
 }
 ```
+
+### Course Notes endpoints
+
+These endpoints require the locally generated profile ID in the `X-Local-User-Id` header. The ID is stored in extension local storage; it is a local profile scope, not public-server authentication. If Postgres/pgvector is not configured, the API returns `503` with `code: "KB_DISABLED"`, while the rest of the backend remains available.
+
+| Method | Endpoint | Body / result |
+|---|---|---|
+| `POST` | `/api/kb/documents` | Multipart form with `file`; accepts PDF, DOCX, MD, TXT up to `KB_MAX_UPLOAD_BYTES` (10 MiB default). |
+| `GET` | `/api/kb/documents` | Returns the profile's document list and `storageUsedBytes`. |
+| `DELETE` | `/api/kb/documents/:id` | Deletes the document and cascades to its chunks and embeddings. |
+| `POST` | `/api/kb/search` | JSON `{ "question": "..." }`; returns debug-ranked matches with score/rank diagnostics. |
+
+Assessment responses include a source with `type: "course_notes"`, `file`, nullable `page`, and `snippet` only when retrieval passes the relevance threshold. Markdown, text, and DOCX passages have no page number unless the source format provides one; no page number is synthesized.
 
 ---
 

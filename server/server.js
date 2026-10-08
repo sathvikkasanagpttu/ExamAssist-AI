@@ -17,6 +17,17 @@ import { generateReasonedAnswer } from "./pipeline/reasoningEngine.js";
 import { runVerificationPass } from "./pipeline/verificationPass.js";
 import { defaultAIClient, AIError, AIConfigError } from "./aiClient.js";
 import { getActiveSearchProvider } from "./pipeline/search.js";
+import multer from "multer";
+import {
+  deleteDocument,
+  ingestDocument,
+  initializeKnowledgeBase,
+  isValidLocalUserId,
+  KnowledgeBaseError,
+  listDocuments,
+  ragEnabled,
+  searchKnowledgeBase
+} from "./kb/knowledgeBase.js";
 
 const app = express();
 
@@ -27,7 +38,10 @@ const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+    const matchesAllowedOrigin = allowedOrigins.includes(origin) || allowedOrigins.some((rule) =>
+      rule.endsWith("://*") && origin?.startsWith(rule.slice(0, -1))
+    );
+    if (!origin || allowedOrigins.includes("*") || matchesAllowedOrigin) {
       callback(null, true);
     } else {
       callback(new Error("CORS origin not allowed by policy"));
@@ -45,6 +59,24 @@ app.use(createRateLimiter({
 }));
 
 const port = Number(process.env.PORT || 8787);
+const host = process.env.HOST || "127.0.0.1";
+const kbUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: Number(process.env.KB_MAX_UPLOAD_BYTES || 10 * 1024 * 1024), files: 1 } });
+void initializeKnowledgeBase();
+
+function localUserId(req) {
+  const value = req.get?.("x-local-user-id") || req.headers?.["x-local-user-id"];
+  return isValidLocalUserId(value) ? value : null;
+}
+
+function sendKnowledgeBaseError(res, error) {
+  if (error instanceof KnowledgeBaseError) {
+    return res.status(error.status).json({ error: error.message, code: error.code });
+  }
+  if (error instanceof multer.MulterError) {
+    return res.status(error.code === "LIMIT_FILE_SIZE" ? 413 : 400).json({ error: "Upload could not be processed", code: error.code });
+  }
+  return res.status(500).json({ error: "Course Notes request failed", code: "KB_REQUEST_FAILED" });
+}
 
 function formatZodErrors(error) {
   const issues = error?.issues || error?.errors || [];
@@ -56,13 +88,15 @@ function formatZodErrors(error) {
 /**
  * GET /api/health - Service health and capabilities check
  */
-app.get(["/health", "/api/health"], (_req, res) => {
+app.get(["/health", "/api/health"], async (_req, res) => {
+  await initializeKnowledgeBase();
   res.json({
     status: "ok",
     service: "ExamAssist AI Assessment Copilot",
     version: "2.1.0",
     uptimeSeconds: Math.floor(process.uptime()),
     aiConfigured: defaultAIClient.isConfigured,
+    ragEnabled: ragEnabled(),
     searchProvider: getActiveSearchProvider(),
     model: defaultAIClient.model,
     pipelineSteps: [
@@ -85,6 +119,49 @@ app.get(["/health", "/api/health"], (_req, res) => {
       cacheEnabled: true
     }
   });
+});
+
+// Course Notes are scoped to the extension's locally generated profile ID.
+app.post("/api/kb/documents", (req, res) => {
+  kbUpload.single("file")(req, res, async (uploadError) => {
+    if (uploadError) return sendKnowledgeBaseError(res, uploadError);
+    try {
+      const document = await ingestDocument({
+        userId: localUserId(req),
+        fileName: req.file?.originalname || "",
+        buffer: req.file?.buffer
+      });
+      res.status(document.duplicate ? 200 : 201).json({ document });
+    } catch (error) {
+      sendKnowledgeBaseError(res, error);
+    }
+  });
+});
+
+app.get("/api/kb/documents", async (req, res) => {
+  try {
+    res.json(await listDocuments(localUserId(req)));
+  } catch (error) {
+    sendKnowledgeBaseError(res, error);
+  }
+});
+
+app.delete("/api/kb/documents/:id", async (req, res) => {
+  try {
+    const deleted = await deleteDocument(localUserId(req), req.params.id);
+    res.status(deleted ? 200 : 404).json({ deleted });
+  } catch (error) {
+    sendKnowledgeBaseError(res, error);
+  }
+});
+
+app.post("/api/kb/search", async (req, res) => {
+  try {
+    const result = await searchKnowledgeBase({ userId: localUserId(req), question: req.body?.question, debug: true });
+    res.json(result);
+  } catch (error) {
+    sendKnowledgeBaseError(res, error);
+  }
 });
 
 /**
@@ -126,7 +203,7 @@ app.post("/api/assessment/analyze", async (req, res) => {
     }
 
     const payload = parseResult.data;
-    const response = await processAssessmentQuestion(payload);
+    const response = await processAssessmentQuestion({ ...payload, userId: localUserId(req) });
 
     res.json(response);
   } catch (err) {
@@ -312,7 +389,7 @@ app.post("/api/analyze", (req, res) => {
 
 // Start Server
 if (process.env.NODE_ENV !== "test") {
-  app.listen(port, () => {
+  app.listen(port, host, () => {
     logger.info(`ExamAssist AI Server running on port ${port}`, { port });
     console.log(`ExamAssist AI Server active on http://localhost:${port}`);
   });

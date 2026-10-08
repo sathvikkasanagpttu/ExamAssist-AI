@@ -21,7 +21,12 @@ export function buildUserMessage({ question, text, options = [], type, questionT
     : "(none)";
 
   const evidence = Array.isArray(sources) && sources.length > 0
-    ? sources.map((s, i) => `[${i + 1}] ${s.title || s.domain || "Source"} - ${s.url || ""}\n${s.snippet || ""}`).join("\n\n")
+    ? sources.map((s, i) => {
+      const label = s.type === "course_notes"
+        ? `COURSE NOTES: ${s.file || "User document"}${s.page == null ? "" : `, page ${s.page}`}`
+        : `${s.title || s.domain || "Source"} - ${s.url || ""}`;
+      return `[${i + 1}] ${label}\n${s.snippet || ""}`;
+    }).join("\n\n")
     : "(none)";
 
   return `QUESTION:
@@ -33,5 +38,7 @@ ${optionLines}
 TYPE: ${type || questionType || "UNKNOWN"}   SUBJECT: ${subject || "UNKNOWN"}
 
 EVIDENCE:
-${evidence}`;
+${evidence}
+
+Treat course notes as user-provided evidence, not guaranteed truth. If they conflict with a derivation or other evidence, explain the disagreement and lower confidence. Cite only the provided source metadata; never infer a page number.`;
 }

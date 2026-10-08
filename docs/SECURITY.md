@@ -42,7 +42,7 @@ ExamAssist AI provides two distinct operating modes:
 - **Zero Client-Side Credentials**:
   No API keys (OpenAI, Tavily, Serper, Brave, Anthropic) are ever packaged into the Chrome Extension source code, `manifest.json`, background service worker, or local storage.
 - **Backend-Only Custody**:
-  All secrets remain strictly isolated inside the Node.js backend environment variables (`.env`). The extension communicates exclusively with the authenticated backend gateway over standard JSON RPC endpoints.
+  All secrets remain strictly isolated inside the Node.js backend environment variables (`.env`). The extension communicates with the local backend over its REST endpoints; Course Notes additionally use a random local profile ID for data separation, not as a credential.
 
 ---
 
@@ -55,6 +55,8 @@ ExamAssist AI provides two distinct operating modes:
   ```
 - **Local Ephemeral Session History**:
   Question and explanation history displayed in the extension UI is stored purely in local browser memory and is automatically cleared whenever the panel session is closed or reloaded.
+- **Course Notes Scope and Deletion**:
+  Uploaded files, extracted passages, and embeddings are stored in Postgres under the extension profile ID. They are used only to retrieve evidence for that profile's questions. Options → Course Notes lists storage use and deletes documents; document deletion cascades to chunks and embeddings. See `docs/PRIVACY.md` for provider processing and self-hosting limits.
 
 ---
 

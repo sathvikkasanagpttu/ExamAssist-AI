@@ -15,6 +15,7 @@ import { runVerificationPass } from "./verificationPass.js";
 import { computeConfidence } from "./confidenceEngine.js";
 import { defaultAIClient } from "../aiClient.js";
 import { logger } from "../logger.js";
+import { ragEnabled, searchKnowledgeBase } from "../kb/knowledgeBase.js";
 
 const CONFIDENCE_RANKS = {
   UNVERIFIED: 0,
@@ -39,6 +40,7 @@ export async function processAssessmentQuestion({
   questionType: qTypeParam,
   context = "",
   subject: subjectOverride,
+  userId = null,
   codeSnippet = "",
   tableData = "",
   mathFormula = "",
@@ -85,6 +87,25 @@ export async function processAssessmentQuestion({
     sources = await orchestrateSearch(queries, maxSources, classification.rawQuestion, classification.questionType);
   }
 
+  let courseNotes = [];
+  if (ragEnabled() && userId && evaluationConfig?.ragEnabled !== false) {
+    try {
+      const retrieval = await searchKnowledgeBase({ userId, question: classification.rawQuestion });
+      courseNotes = retrieval.matches.map((match) => ({
+        type: "course_notes",
+        title: match.file,
+        domain: "Course Notes",
+        file: match.file,
+        page: match.page,
+        snippet: match.snippet,
+        section: match.section
+      }));
+    } catch (error) {
+      logger.warn("Course Notes retrieval unavailable", { code: error.code || "KB_RETRIEVAL_FAILED" });
+    }
+  }
+  const allSources = [...sources, ...courseNotes];
+
   // 3. Specialized Reasoning (Solve before search, mathjs/sandbox, option integrity)
   const reasonedOutput = await generateReasonedAnswer({
     question: classification.rawQuestion,
@@ -92,7 +113,7 @@ export async function processAssessmentQuestion({
     subject: classification.subject,
     topic: classification.topic,
     options: classification.options,
-    sources,
+    sources: allSources,
     codeSnippet,
     mathFormula,
     aiClient,
@@ -105,14 +126,14 @@ export async function processAssessmentQuestion({
     question: classification.rawQuestion,
     directAnswer: typeof reasonedOutput.directAnswer === "object" ? (reasonedOutput.directAnswer?.text || "") : reasonedOutput.directAnswer,
     explanation: reasonedOutput.explanation,
-    sources,
+    sources: allSources,
     aiClient
   });
 
   // 5. Confidence Engine Calibration
   const engineResult = computeConfidence({
     verificationStatus: verification.status,
-    sources,
+    sources: allSources,
     hasContradiction: verification.hasContradiction,
     contradictionExplanation: verification.contradictionExplanation,
     questionType: classification.questionType
@@ -124,7 +145,7 @@ export async function processAssessmentQuestion({
   if (finalConfidence === (reasonedOutput.confidence || "").toUpperCase() && reasonedOutput.confidenceReason) {
     finalConfidenceReason = reasonedOutput.confidenceReason;
   }
-  if (verification.status === "UNVERIFIED" || sources.length === 0) {
+  if (verification.status === "UNVERIFIED" || allSources.length === 0) {
     finalConfidenceReason = "Evidence is unverified or unavailable; independent verification required.";
   }
 
@@ -132,7 +153,7 @@ export async function processAssessmentQuestion({
   logger.info("Assessment processed", {
     questionType: classification.questionType,
     confidence: finalConfidence,
-    sourcesCount: sources.length,
+    sourcesCount: allSources.length,
     latencyMs
   });
 
@@ -159,7 +180,8 @@ export async function processAssessmentQuestion({
       conflicting: verification.conflicting,
       unsupported: verification.unsupported
     },
-    sources: sources.map(s => ({
+    sources: allSources.map(s => ({
+      ...(s.type === "course_notes" ? { type: "course_notes", file: s.file, page: s.page } : { type: "web" }),
       title: s.title,
       url: s.url,
       domain: s.domain,

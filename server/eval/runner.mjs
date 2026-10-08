@@ -307,6 +307,7 @@ await Promise.all(
           options: q.options || [],
           type: q.type,
           subject: q.subject,
+          userId: process.env.EVAL_LOCAL_USER_ID || null,
           mode: "Practice Mode",
           evaluationConfig: config,
           aiClient: aiClientOverride

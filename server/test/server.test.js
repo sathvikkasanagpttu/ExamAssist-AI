@@ -13,12 +13,12 @@ afterEach(() => {
 });
 
 // In-memory request dispatcher for Express without needing TCP socket permissions
-function dispatchRequest(app, { method, url, body }) {
+function dispatchRequest(app, { method, url, body, headers: requestHeaders = {} }) {
   return new Promise((resolve) => {
     const req = new EventEmitter();
     req.method = method;
     req.url = url;
-    req.headers = { "content-type": "application/json" };
+    req.headers = { "content-type": "application/json", ...requestHeaders };
     req.socket = { remoteAddress: "127.0.0.1" };
     req.connection = req.socket;
     req.body = body || {};
@@ -63,8 +63,19 @@ test("GET /health returns pipeline status", async () => {
   const response = await dispatchRequest(app, { method: "GET", url: "/health" });
   assert.equal(response.status, 200);
   assert.equal(response.body.status, "ok");
+  assert.equal(typeof response.body.ragEnabled, "boolean");
   assert.ok(Array.isArray(response.body.pipelineSteps));
   assert.ok(response.body.pipelineSteps.length >= 8);
+});
+
+test("Course Notes returns a typed unavailable response when storage is disabled", async () => {
+  const response = await dispatchRequest(app, {
+    method: "GET",
+    url: "/api/kb/documents",
+    headers: { "x-local-user-id": "123e4567-e89b-42d3-a456-426614174000" }
+  });
+  assert.equal(response.status, 503);
+  assert.equal(response.body.code, "KB_DISABLED");
 });
 
 test("POST /api/analyze extracts question structure", async () => {

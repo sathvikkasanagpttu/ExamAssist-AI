@@ -12,6 +12,8 @@ chrome.runtime.onInstalled.addListener(async () => {
     enableAllSites: true,
     autoDetectOptions: true
   });
+  const { localUserId } = await chrome.storage.local.get("localUserId");
+  if (!localUserId) await chrome.storage.local.set({ localUserId: crypto.randomUUID() });
 
   // Create context menu for selected text
   chrome.contextMenus.create({

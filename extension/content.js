@@ -487,7 +487,12 @@
     }
 
     // Format Sources
-    const sources = (data.sources || []).map((s, idx) => `
+    const sources = (data.sources || []).map((s, idx) => s.type === "course_notes" ? `
+      <div class="examai-source-card">
+        <strong>Matched your notes: ${esc(s.file || "Course note")}${s.page == null ? "" : ` p.${esc(s.page)}`}</strong>
+        ${s.snippet ? `<p>${esc(s.snippet)}</p>` : ""}
+      </div>
+    ` : `
       <div class="examai-source-card">
         <a href="${esc(s.url)}" target="_blank" rel="noopener" title="${esc(s.title)}">
           [${idx + 1}] ${esc(s.title || s.domain)}
@@ -665,9 +670,14 @@
 
       if (cfg.theme) currentTheme = cfg.theme;
 
+      const identity = await chrome.storage.local.get({ localUserId: "" });
+      if (!identity.localUserId) {
+        identity.localUserId = crypto.randomUUID();
+        await chrome.storage.local.set({ localUserId: identity.localUserId });
+      }
       const res = await fetch(`${cfg.apiBase}/api/assessment/analyze`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Local-User-Id": identity.localUserId },
         body: JSON.stringify({
           question: questionText,
           options: safeOptions,

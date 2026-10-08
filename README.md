@@ -235,6 +235,12 @@ npm run eval:smoke
 
 Configs `a_single_pass` through `e_specialized` are in `server/eval/configs/`. Each run writes a JSON result and Markdown report under `server/eval/results/`; per-question cache entries are under `server/eval/cache/`. The report breaks accuracy down by subject, question type, and difficulty, shows calibration by confidence, UNVERIFIED rate, latency percentiles, token usage, and cost when a rate is configured. `EVAL_MAX_CALLS` caps provider calls (default 200), and `EVAL_CONCURRENCY` controls live parallelism. Set `EVAL_COST_PER_1K_TOKENS_USD` to record an estimated cost using your own provider rate; without a rate, cost is reported as unavailable. Provider-reported token totals are preferred; fallback token counts are explicitly estimates. Smoke mode uses a mock AI and is only a CI plumbing check; its accuracy is not representative. Check `server/eval/REVIEW.md` and resolve `needsReview` rows before treating full-set accuracy as final.
 
+## Course Notes (optional RAG)
+
+Run `docker compose up --build -d` to start the backend and Postgres/pgvector. The database persists in the `course-notes-data` volume and is not exposed as a host port. Course Notes can also be disabled by leaving `KB_DATABASE_URL` unset when running the backend directly; `/api/health` reports `ragEnabled:false`. Configure `OPENAI_API_KEY` on the backend for embeddings and AI reranking. Open extension Options → Course Notes to upload or delete PDF, DOCX, Markdown, or TXT files and view storage use. Review [docs/PRIVACY.md](docs/PRIVACY.md) before uploading sensitive study material.
+
+For a live `c_solve_tiebreak` vs `d_rag` eval, set `EVAL_LOCAL_USER_ID` to the profile ID that owns the fixture notes; the eval runner will query only that profile's documents.
+
 ---
 
 ## 🔒 Academic Integrity & Safety

@@ -9,9 +9,12 @@ import { EVIDENCE_VERIFICATION_PROMPT, CONTRADICTION_DETECTION_PROMPT } from "..
 
 function formatSourcesText(sources) {
   if (!sources || sources.length === 0) return "No external sources available.";
-  return sources.map((s, i) =>
-    `[${i + 1}] Title: ${s.title}\nURL: ${s.url}\nAuthority: ${s.authority}/100\nSnippet: ${s.snippet || ""}`
-  ).join("\n\n");
+  return sources.map((s, i) => {
+    if (s.type === "course_notes") {
+      return `[${i + 1}] User course note: ${s.file || s.title || "document"}${s.page == null ? "" : `, page ${s.page}`}\nSnippet: ${s.snippet || ""}`;
+    }
+    return `[${i + 1}] Title: ${s.title}\nURL: ${s.url}\nAuthority: ${s.authority}/100\nSnippet: ${s.snippet || ""}`;
+  }).join("\n\n");
 }
 
 export async function runVerificationPass({
