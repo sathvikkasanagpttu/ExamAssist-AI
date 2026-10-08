@@ -1,253 +1,194 @@
-# ExamAssist AI — Evidence-First Study Copilot & Assessment Assistant
+# ExamAssist AI — Evidence-First Study Copilot
 
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-green.svg)](https://nodejs.org/)
 [![Chrome Extension](https://img.shields.io/badge/Chrome%20Extension-Manifest%20V3-blue.svg)](https://developer.chrome.com/docs/extensions/mv3/)
-[![Tests](https://img.shields.io/badge/Test%20Suite-50%20Tests%20Passing-brightgreen.svg)](file:///Users/kasanagotttusathvik/Downloads/ExamAI-Study-Assistant/server/test)
-[![License](https://img.shields.io/badge/License-MIT-orange.svg)](file:///Users/kasanagotttusathvik/Downloads/ExamAI-Study-Assistant/LICENSE)
+[![Evaluation set](https://img.shields.io/badge/Evaluation%20set-155%20practice%20questions-brightgreen.svg)](server/eval/dataset.jsonl)
 
-**ExamAssist AI** is an evidence-first academic study assistant and assessment copilot built on Chrome Manifest V3 and a dedicated Express reasoning backend.
+ExamAssist AI is a Chrome Manifest V3 study copilot with an Express backend. It helps students work through practice questions, problem sets, textbook review, and assessments where AI assistance has been explicitly authorized. Every interaction is visible and user-triggered; the extension never selects or submits answers.
 
-Designed for students working through practice exams, problem sets, textbook reviews, and explicitly authorized AI-assisted assessments, ExamAssist AI combines web retrieval, specialized multi-domain reasoning, claim verification, and transparent confidence calibration without requiring students to leave their page.
+The system is designed to make uncertainty visible. It returns typed errors when AI generation is unavailable, does not invent citations or page numbers, and labels unsupported output as `UNVERIFIED`.
 
----
+## What it includes
 
-## 🌟 Core Architecture & Principles
+- **Practice and authorized-assessment modes.** Practice Mode is the default. Authorized Assessment Mode requires the user to affirm that AI use is permitted.
+- **Evidence-first reasoning.** The pipeline classifies the question, retrieves and ranks available evidence, solves from first principles, verifies claims, and calibrates confidence as `HIGH`, `MEDIUM`, `LOW`, or `UNVERIFIED`.
+- **Option integrity checks.** Answer letters and text must match the options that were actually supplied. The system does not fall back to a guessed choice.
+- **Specialized solvers.** Numerical questions use deterministic math evaluation and optional symbolic operations. Coding and debugging problems can run in an isolated Docker service; SQL is evaluated only as a single read query against a fresh in-memory SQLite database. The UI shows tool output only when a tool actually completed.
+- **Private Course Notes RAG.** A user can upload PDF, DOCX, Markdown, or text notes. Documents, chunks, and embeddings are scoped to that browser profile and can be deleted from the extension options page.
+- **Evaluation and ablations.** A 155-question labeled practice set covers multiple subjects, formats, and difficulty levels. Configurations measure the contribution of solve-first reasoning, retrieval, tie-breaks, RAG, and specialized solvers.
 
-### Priority 1: Zero Fake Answers & Calibrated Confidence
-- **No Canned Fallbacks**: Deleted all hardcoded sample question branches and mock fallbacks in production.
-- **Typed AI Errors**: If an AI provider is unconfigured or unavailable, the backend throws typed errors: `AI_NOT_CONFIGURED` (503), `AI_UNAVAILABLE` (503), `AI_RATE_LIMITED` (429), `AITimeoutError` (504).
-- **JSON Repair Loop**: Retries malformed AI responses with a strict JSON-repair prompt before failing safely as `UNVERIFIED`.
-- **Lower Confidence Selection**: Final confidence is computed as the **LOWER** of the model's self-reported confidence and the confidence engine's calculated level. Never defaults to `HIGH`.
-- **Transparent Health Status**: `/api/health` reports `aiConfigured: boolean`, `searchProvider: 'tavily' | 'serper' | 'brave' | 'none'`, and `model`.
+## Architecture
 
-### Priority 2: Rigorous Academic Reasoning & Problem Solving
-- **Solve-Before-Searching**:
-  1. *Pass 1*: Solves the question from first principles at temperature 0 with **NO** web evidence.
-  2. *Pass 2*: Examines retrieved sources to confirm or refine findings.
-  3. *Pass 3 (Tie-Break)*: If Pass 1 and Pass 2 disagree, an arbitrator evaluates why they differed. The answer is returned with confidence capped at `LOW` or `MEDIUM` and the disagreement explained.
-- **Option Integrity Verification**: Validates that the chosen letter and text strictly correspond to the options provided. Eliminates mismatched letters and distractor hallucinations.
-- **Deterministic Math Engine**: Integrates `mathjs` (`evaluateNumericalContext`) to compute formulas, substitutions, and verify calculations against options.
-- **Sandboxed Code Execution**: Executes JavaScript code snippets in an isolated Node `vm` context with a 1500ms timeout, memory boundary, and zero host access (`process`/`fs`/network prohibited).
-
-### Priority 3: Multi-Angle Search & Deduplication
-- **Multi-Provider Support**: Supports Tavily (`TAVILY_API_KEY`), Serper (`SERPER_API_KEY`), and Brave Search (`BRAVE_SEARCH_API_KEY` or `BRAVE_API_KEY`).
-- **Free Wikipedia Fallback**: If no search API key is configured, uses Wikipedia's OpenSearch API for definitional concepts. If even Wikipedia returns nothing, returns 0 sources (never injects fake citations).
-- **Relevance-First Ranking**: Prioritizes matches to the question and categorical source authority tiers (`.gov`, `.edu`, peer-reviewed journals); response source quality is labeled by category rather than a fabricated numeric score.
-- **Search Skipping**: Pure mathematics and coding questions skip search and proceed directly to solving.
-
-### Priority 4: User-Controlled Chrome MV3 Extension
-- **Always Visible & User-Triggered**: No stealth mode, no proctor evasion, no auto-clicking, and no auto-submitting.
-- **Site Allow-List**: User-controlled domain toggle ("Enable on this site" or "Enable on all websites") via extension popup.
-- **Default Copy Safety**: Copying text does not automatically trigger API requests (`autoAnswerOnCopy: false` by default).
-- **Prominent Disclaimers**: Displays *"⚠️ AI can be wrong, verify before you submit"* on every panel view.
-- **MCQ Option Badging & Warning**: Shows detected option count badge and displays a warning banner if fewer than 2 options were captured for an MCQ.
-- **Edit Before Sending**: Collapsible drawer allowing students to review or modify question and option text before querying the backend.
-- **Graceful Extension Reload Handling**: Detects context invalidation gracefully and guides the user to refresh the page.
-
-### Priority 5: Hygiene, Testing & Security
-- **Strict Git Hygiene**: Untracked `.env` files via `.gitignore`. Removed legacy duplicate asset folders and `.zip` archives.
-- **Zero Client Keys**: All API credentials reside securely on the backend server.
-- **Comprehensive 50-Test Suite**: Covers unit tests, end-to-end pipelines, and offline mock handlers with zero network dependencies in test mode.
-
----
-
-## 🏗️ Pipeline Flow
-
-```
-                      STUDENT ACTION
-           (Highlight Pill / Shortcut / Ask)
-                         │
-                         ▼
-           ┌───────────────────────────┐
-           │    Extraction Manager     │ ◄─── Generic, Canvas, Moodle Adapters
-           └─────────────┬─────────────┘
-                         │
-              POST /api/assessment/analyze
-                         │
-                         ▼
-           ┌───────────────────────────┐
-           │  Question Classification  │ ◄─── 10 Types & Subject Analyzer
-           └─────────────┬─────────────┘
-                         │
-                         ▼
-           ┌───────────────────────────┐
-           │ Multi-Angle Search Engine │ ◄─── Tavily / Serper / Brave / Wikipedia
-           └─────────────┬─────────────┘
-                         │
-                         ▼
-           ┌───────────────────────────┐
-           │ Solve-Before-Search Pass  │ ◄─── Pass 1 (First Principles)
-           │ + MathJS & Node VM Trace  │      Pass 2 (With Evidence)
-           │                           │      Pass 3 (Tie-Break Disagreement)
-           └─────────────┬─────────────┘
-                         │
-                         ▼
-           ┌───────────────────────────┐
-           │ Independent Verification  │ ◄─── Claim Status & Conflict Check
-           └─────────────┬─────────────┘
-                         │
-                         ▼
-           ┌───────────────────────────┐
-           │ Calibrated Confidence Eng │ ◄─── Lower of Model & Engine Level
-           └─────────────┬─────────────┘
-                         │
-                         ▼
-           ┌───────────────────────────┐
-           │ Chrome Floating Panel UI  │ ◄─── Option Analysis, Reasoning & Citations
-           └───────────────────────────┘
+```mermaid
+flowchart TD
+    A[User highlights or submits a practice question] --> B[Chrome MV3 extension]
+    B --> C[Express assessment API]
+    C --> D[Classification and option validation]
+    D --> E[First-principles reasoning]
+    D --> F[Web evidence retrieval]
+    D --> G[Private Course Notes retrieval]
+    E --> H[Specialized tools: math, symbolic, code, SQL]
+    F --> I[Verification and confidence calibration]
+    G --> I
+    H --> I
+    I --> J[Visible answer, evidence, tool status, and confidence]
 ```
 
----
+The backend processes code only through the separate sandbox service. It does not execute submitted code in the Express process. The sandbox uses a read-only container filesystem, resource limits, a private Docker network, a temporary workspace per run, and unprivileged submitted processes. See [Security](docs/SECURITY.md) for the security boundary and limitations.
 
-## 🚀 Getting Started
+## Quick start
 
-### 1. Prerequisites
-- Google Chrome (or any Chromium browser)
-- Node.js 20+ and npm
+### Prerequisites
 
-### 2. Configure & Start the Backend
+- Docker Desktop with Docker Compose v2
+- Google Chrome or another Chromium browser
+- Node.js 20+ and npm for local development and tests
+
+### Run the full local stack
 
 ```bash
-# Navigate to the backend directory
-cd server
-
-# Install dependencies (express, mathjs, openai, zod, cors, dotenv)
-npm install
-
-# Create environment configuration
 cp .env.example .env
-```
-
-Edit `server/.env` to configure your keys:
-
-```env
-# Server Port
-PORT=8787
-
-# AI Model Provider (Required for production generation)
-OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_MODEL=gpt-4o
-
-# Web Search Provider (Optional: Tavily, Serper, or Brave)
-TAVILY_API_KEY=your_tavily_api_key_here
-# SERPER_API_KEY=your_serper_api_key_here
-# BRAVE_SEARCH_API_KEY=your_brave_api_key_here
-```
-
-Start the server:
-
-```bash
-npm start
-```
-
-### 3. Verify System Health
-
-Run a health check to confirm server configuration:
-
-```bash
+# Edit .env and add OPENAI_API_KEY to enable AI generation.
+docker compose up --build -d
 curl http://localhost:8787/api/health
 ```
 
-Expected response:
+Compose starts three local services:
+
+| Service | Purpose | Exposure |
+|---|---|---|
+| `examassist-backend` | Assessment API, RAG orchestration, and extension backend | `127.0.0.1:8787` by default |
+| `course-notes-db` | Postgres with pgvector for private notes | Private Docker network only |
+| `examassist-sandbox` | Isolated code, SQL, and symbolic solver service | Private Docker network; diagnostic endpoint on `127.0.0.1:8791` |
+
+If port 8787 is already in use, set `EXAMASSIST_HOST_PORT` in `.env` and update the extension's **Backend Server URL** to the same port. For example, `EXAMASSIST_HOST_PORT=8788` pairs with `http://localhost:8788`.
+
+The health response reports whether the AI provider, Course Notes, and sandbox are available:
+
 ```json
 {
   "status": "ok",
-  "service": "ExamAssist-Backend",
   "aiConfigured": true,
-  "searchProvider": "tavily",
-  "model": "gpt-4o",
-  "port": 8787
+  "ragEnabled": true,
+  "sandboxEnabled": true
 }
 ```
 
-### 4. Load the Chrome Extension
+No API key is required to start the stack. Requests that need AI generation return the typed `AI_NOT_CONFIGURED` error until `OPENAI_API_KEY` is set; they do not produce a guessed answer.
 
-1. Open Google Chrome and go to `chrome://extensions/`.
-2. Toggle **Developer mode** in the top right.
-3. Click **Load unpacked**.
-4. Select the `extension/` folder in this repository.
-5. Click the extension icon in your toolbar to configure settings or enable site permissions.
+### Run the backend directly
 
-### 5. Test with the Interactive Practice Portal
-
-1. Open `sample-assessment.html` directly in Chrome (`file:///path/to/sample-assessment.html` or via local server).
-2. Highlight any question or options on the page.
-3. Click the floating **ExamAssist AI** action button or press `Ctrl+Shift+E` (`Cmd+Shift+E` on Mac).
-4. Review the generated answer, option analysis, and calibrated confidence level.
-
----
-
-## 🧪 Comprehensive Test Suite (50 Tests)
-
-Run all integration and unit tests:
+For a backend-only development setup, install dependencies and provide your own database and sandbox URLs if you want those optional features:
 
 ```bash
 cd server
-npm test
+npm install
+cp .env.example .env
+npm start
 ```
 
-### Test Coverage Highlights:
-- **`academic-questions.test.js`**:
-  - **20 MCQs with Shuffled Options**: Tests correct options across positions (A, B, C, D) across Biology, History, CS, Chemistry, Physics, Economics, Math, and Literature.
-  - **10 Numerical Problems**: Tests `mathjs` deterministic evaluation (kinetic energy, force, arithmetic, compound interest, Pythagorean theorem, Ohm's law, and option value matching).
-  - **10 Coding & Sandbox Cases**: Tests Node `vm` sandboxed execution, infinite loop timeout protection, syntax errors, and process boundary isolation.
-  - **10 Conceptual Reasoning Cases**: Tests first-principles derivation, question restatement, and strict schema validation.
-- **`extension-extractors.test.js`**:
-  - Tests `GenericExtractor`, `MoodleAdapter`, `CanvasAdapter`, and `ExtractionManager` with mock DOM fixtures.
-  - Tests `parseQuestionAndOptions` with multiline, inline, and numbered option formatting.
-- **`ai-client-mock.test.js`**:
-  - Tests `AI_NOT_CONFIGURED` error throwing when no API key is provided.
-  - Tests invalid JSON repair retry behavior.
-  - Tests option letter/text integrity mismatch rejection.
-  - Tests tie-break downgrade to `LOW` confidence on solver disagreement.
-  - Tests `UNVERIFIED` assignment when external sources are absent.
-- **`classification.test.js`**:
-  - Tests 20 MCQs, 10 numericals, 10 coding/SQL, and 10 conceptual classifications.
-- **`verification-cases.test.js`**:
-  - Tests 5 empirical contradiction cases (verifying `CONFLICTING` / `LOW` confidence).
-  - Tests 5 insufficient-evidence cases (verifying `UNVERIFIED` confidence).
-- **`api-validation.test.js` & `server.test.js`**:
-  - Tests `/api/health`, `/api/config`, `/api/question/classify`, `/api/search`, `/api/evidence/verify`, `/api/answer/generate`, and `/api/assessment/analyze`.
+Leave `KB_DATABASE_URL` unset to disable Course Notes when running directly. Set `SANDBOX_URL` only if the backend can reach the isolated sandbox service. `/api/health` exposes the resulting capability flags.
 
----
+### Load the Chrome extension
 
-## 📡 API Reference Summary
+1. Open `chrome://extensions/`.
+2. Turn on **Developer mode**.
+3. Choose **Load unpacked** and select this repository's `extension/` directory.
+4. Open the extension popup, choose the allowed site, and use **Settings & Configuration** to set the backend URL if it differs from `http://localhost:8787`.
+5. On a practice page, select question text or use the floating action button. Review the question before sending and review the answer before submitting anything yourself.
 
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/api/health` | Returns service health, `aiConfigured`, `searchProvider`, and `model` |
-| `GET` | `/api/config` | Returns runtime config, supported question types, and modes |
-| `POST` | `/api/assessment/analyze` | Master pipeline: classification, search, solve-before-search, verification |
-| `POST` | `/api/question/classify` | Classifies question into 10 types and identifies academic subject |
-| `POST` | `/api/search` | Multi-angle query generator, deduplication, and 70/30 relevance ranking |
-| `POST` | `/api/evidence/verify` | Claim verification and contradiction detection pass |
-| `POST` | `/api/answer/generate` | Domain reasoning with solve-before-search and mathjs/sandbox trace |
+`sample-assessment.html` provides a local practice page. If Chrome blocks a `file://` URL, serve the repository directory on loopback instead:
+
+```bash
+python3 -m http.server 5174 --bind 127.0.0.1
+# Open http://127.0.0.1:5174/sample-assessment.html
+```
+
+## Course Notes
+
+Open **Extension Options → Course Notes** to upload PDF, DOCX, Markdown, or text files (10 MiB by default). ExamAssist assigns the extension a random local profile ID and retrieves only documents under that profile. Course Notes are evidence, not guaranteed truth: retrieved passages enter the same verification path as other evidence.
+
+The options page lists stored documents and storage use. Deleting a document deletes its associated chunks and embeddings. Review [Privacy](docs/PRIVACY.md) before uploading sensitive material; the local profile ID is a data-scope mechanism for a self-hosted setup, not authentication for a public deployment.
+
+## Specialized solver behavior
+
+| Question family | Tooling | Verification behavior |
+|---|---|---|
+| Numerical and mathematics | `mathjs`; symbolic operations through SymPy | A disagreement with the generated answer is surfaced and confidence is lowered. |
+| Coding and debugging | Python, JavaScript, C, C++, and Java in the isolated sandbox | Test output is recorded only when execution completes. Sandbox failure leaves the result `UNVERIFIED`. |
+| SQL | Fresh in-memory SQLite database | Only one `SELECT` or CTE query is allowed; destructive statements are rejected. |
+| MCQ and multi-select | Independent candidate answers with evidence comparison | The answer must map to a supplied option and have unique evidence support. |
+
+Tool status is returned in `toolEvidence`. A **Verified by** badge in the extension means that specific tool executed successfully; it does not replace the evidence and confidence labels.
 
 ## Evaluation harness
 
-The labeled practice set lives at `server/eval/dataset.jsonl`. Run one ablation configuration or a smaller slice with:
+The labeled practice dataset is at [server/eval/dataset.jsonl](server/eval/dataset.jsonl). It contains 155 items across STEM, humanities, computing, aptitude, and multiple question formats. Four rows remain marked `needsReview`; see [server/eval/REVIEW.md](server/eval/REVIEW.md) before using full-set accuracy as a final quality claim.
+
+Run an ablation or a deterministic plumbing check from `server/`:
 
 ```bash
-cd server
 npm run eval -- --config c_solve_tiebreak --limit 25
 npm run eval:smoke
 ```
 
-Configs `a_single_pass` through `e_specialized` are in `server/eval/configs/`. Each run writes a JSON result and Markdown report under `server/eval/results/`; per-question cache entries are under `server/eval/cache/`. The report breaks accuracy down by subject, question type, and difficulty, shows calibration by confidence, UNVERIFIED rate, latency percentiles, token usage, and cost when a rate is configured. `EVAL_MAX_CALLS` caps provider calls (default 200), and `EVAL_CONCURRENCY` controls live parallelism. Set `EVAL_COST_PER_1K_TOKENS_USD` to record an estimated cost using your own provider rate; without a rate, cost is reported as unavailable. Provider-reported token totals are preferred; fallback token counts are explicitly estimates. Smoke mode uses a mock AI and is only a CI plumbing check; its accuracy is not representative. Check `server/eval/REVIEW.md` and resolve `needsReview` rows before treating full-set accuracy as final.
+Configurations live in `server/eval/configs/`:
 
-## Course Notes (optional RAG)
+| Configuration | Enabled capabilities |
+|---|---|
+| `a_single_pass` | One reasoning pass |
+| `b_solve_evidence` | Solve-first reasoning and retrieval |
+| `c_solve_tiebreak` | Solve-first reasoning, retrieval, and disagreement tie-break |
+| `d_rag` | Full reasoning plus Course Notes retrieval |
+| `e_specialized` | Full pipeline plus deterministic math, code, SQL, and MCQ tools |
 
-Run `docker compose up --build -d` to start the backend, Postgres/pgvector, and the restricted solver sandbox. The database persists in the `course-notes-data` volume and is not exposed as a host port. Course Notes can also be disabled by leaving `KB_DATABASE_URL` unset when running the backend directly; `/api/health` reports `ragEnabled:false`. The sandbox uses a non-root container with resource caps and network-isolated execution; health reports `sandboxEnabled`. Configure `OPENAI_API_KEY` on the backend for embeddings and AI reranking. Open extension Options → Course Notes to upload or delete PDF, DOCX, Markdown, or TXT files and view storage use. Review [docs/PRIVACY.md](docs/PRIVACY.md) before uploading sensitive study material.
+Each live run writes JSON and Markdown reports to `server/eval/results/`, and caches per-question results under `server/eval/cache/`. Reports include breakdowns by subject, question type, and difficulty; confidence calibration; `UNVERIFIED` rate; latency percentiles; and token/cost data when the provider reports it or a local rate is configured. `EVAL_MAX_CALLS` limits provider calls, `EVAL_CONCURRENCY` controls parallelism, and `EVAL_COST_PER_1K_TOKENS_USD` enables an estimated cost field. Smoke mode uses a mock AI and verifies wiring only; it is not representative of live accuracy.
 
-For a live `c_solve_tiebreak` vs `d_rag` eval, set `EVAL_LOCAL_USER_ID` to the profile ID that owns the fixture notes; the eval runner will query only that profile's documents.
+To evaluate fixture notes with the RAG configuration, set `EVAL_LOCAL_USER_ID` to the browser profile ID that owns the fixture documents. The runner will retrieve only that profile's notes.
 
----
+## Tests and quality checks
 
-## 🔒 Academic Integrity & Safety
+```bash
+cd server
+npm run lint
+npm test
+npm run eval:smoke
+```
 
-ExamAssist AI is designed exclusively for learning, revision, homework assistance, and authorized assessments:
-- **No Stealth / Proctor Evasion**: Does not conceal UI, bypass screen recording, or suppress browser events.
-- **No Automated Clicking**: Never selects answers or submits assessments automatically.
-- **No Hallucinated Citations**: Never invents URLs, studies, authors, or statistics.
-- **Transparent Confidence**: Never claims 100% accuracy; clearly flags weak, conflicting, or unverified claims.
-- **Secure Backend**: Extension code contains no API keys or secrets.
+The Node test suite covers question classification, option integrity, typed AI errors, evaluation dataset validation, Course Notes ingestion/retrieval/deletion, pipeline behavior, extension extractors, and specialized solvers. The Docker-backed code and SQL integration cases run when the sandbox is available; they are skipped in a backend-only test environment.
+
+For the full local service check:
+
+```bash
+docker compose up --build -d
+curl http://localhost:8787/api/health
+docker compose ps
+```
+
+## API summary
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/health` or `/health` | Runtime health and `aiConfigured`, `ragEnabled`, and `sandboxEnabled` flags |
+| `GET` | `/api/config` | Supported question types, modes, and limits |
+| `POST` | `/api/assessment/analyze` | Full assessment pipeline; accepts question, options, mode, and optional extracted context |
+| `POST` | `/api/question/classify` | Classifies a question and its expected evidence needs |
+| `POST` | `/api/search` | Generates and executes evidence retrieval queries |
+| `POST` | `/api/evidence/verify` | Verifies answer claims against supplied sources |
+| `POST` | `/api/answer/generate` | Runs the reasoning engine for a classified question |
+| `POST` | `/api/kb/documents` | Uploads and indexes a profile-scoped course note |
+| `GET` | `/api/kb/documents` | Lists that profile's documents and storage use |
+| `DELETE` | `/api/kb/documents/:id` | Deletes a profile-scoped document, chunks, and embeddings |
+| `POST` | `/api/kb/search` | Searches profile-scoped notes for diagnostics |
+
+Course Notes endpoints require the extension's `X-Local-User-Id` header. See [the API reference](docs/API.md) for request and response schemas, errors, and examples.
+
+## Academic integrity, privacy, and security
+
+- Use ExamAssist only for study and assessments where assistance has been expressly permitted.
+- The extension never hides itself, evades proctoring, auto-selects an answer, or submits an assessment.
+- Credentials stay in backend environment variables. Do not commit `.env` files.
+- Sources, page numbers, and tool execution status are never fabricated. If reliable support is unavailable, the response is `UNVERIFIED` or a typed error.
+- Course Notes remain private to the configured database and browser profile scope until you delete them. They may be sent to the configured AI provider for embeddings, reranking, or answer generation.
+
+Read [Security](docs/SECURITY.md), [Privacy](docs/PRIVACY.md), [API reference](docs/API.md), and [Architecture](docs/ARCHITECTURE.md) before deploying beyond a trusted local environment.
