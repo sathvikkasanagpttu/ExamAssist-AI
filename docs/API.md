@@ -84,6 +84,10 @@ Retrieves public extension configuration, allowable question types, and mode def
 ### `POST /api/assessment/analyze`
 **Master End-to-End Orchestrator**. Runs the entire 11-step pipeline from question input to classified, evidenced, and verified output.
 
+### `POST /api/assessment/analyze/stream`
+
+Accepts the same JSON body as `/api/assessment/analyze` and returns `text/event-stream`. Events occur in order: `classified`, optional `searching` and `retrieved`, `solving`, `verifying`, and terminal `done` or `error`. `done` contains `{ "response": AssessmentResponse }`. Closing the client request cancels remaining pipeline stages; the standard JSON endpoint remains available.
+
 #### Request Body:
 ```json
 {

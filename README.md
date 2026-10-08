@@ -178,6 +178,7 @@ docker compose ps
 | `GET` | `/api/health` or `/health` | Runtime health and `aiConfigured`, `ragEnabled`, and `sandboxEnabled` flags |
 | `GET` | `/api/config` | Supported question types, modes, and limits |
 | `POST` | `/api/assessment/analyze` | Full assessment pipeline; accepts question, options, mode, and optional extracted context |
+| `POST` | `/api/assessment/analyze/stream` | SSE progress events (`classified`, `searching`, `retrieved`, `solving`, `verifying`, then `done` or `error`) for a visible, cancellable analysis |
 | `POST` | `/api/question/classify` | Classifies a question and its expected evidence needs |
 | `POST` | `/api/search` | Generates and executes evidence retrieval queries |
 | `POST` | `/api/evidence/verify` | Verifies answer claims against supplied sources |

@@ -13,6 +13,7 @@
   let currentMode = "Practice Mode"; // "Practice Mode" or "Authorized Assessment Mode"
   let authorizedModeConfirmed = false;
   let isMinimized = false;
+  let activeAnalyzeController = null;
 
   // Session History (cleared on close by default)
   const sessionHistory = [];
@@ -373,12 +374,52 @@
           <div style="text-align:center;color:#60a5fa;font-size:12px;margin-top:14px;">
             Solving from first principles, verifying sources & checking option integrity…
           </div>
+          <ol id="examai-progress" class="examai-progress-list"><li data-step="classified">Waiting to classify</li><li data-step="searching">Waiting to search</li><li data-step="retrieved">Waiting for evidence</li><li data-step="solving">Waiting to solve</li><li data-step="verifying">Waiting to verify</li></ol>
+          <button id="examai-cancel" class="examai-btn-action examai-cancel-btn">Cancel</button>
         </div>
       </div>`;
 
     makeDraggable(panel, panel.querySelector(".examai-head"));
     bindHeaderControls(panel, captured);
     bindEditBox(panel);
+    panel.querySelector("#examai-cancel")?.addEventListener("click", () => activeAnalyzeController?.abort());
+  }
+
+  function updateStreamingProgress(event, data = {}) {
+    const panel = document.getElementById(PANEL_ID);
+    const item = panel?.querySelector(`#examai-progress [data-step="${event}"]`);
+    if (!item) return;
+    item.classList.add("examai-progress-complete");
+    if (event === "retrieved") item.textContent = `Retrieved ${Number(data.count || 0)} source(s)`;
+    else item.textContent = event.charAt(0).toUpperCase() + event.slice(1);
+  }
+
+  async function readAssessmentStream(response) {
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("Streaming is not supported by this browser response.");
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+      const blocks = buffer.split("\n\n");
+      buffer = blocks.pop();
+      for (const block of blocks) {
+        const event = block.match(/^event:\s*(.+)$/m)?.[1];
+        const raw = block.match(/^data:\s*(.+)$/m)?.[1];
+        if (!event || !raw) continue;
+        const data = JSON.parse(raw);
+        if (event === "error") {
+          const error = new Error(data.message || "Analysis failed");
+          error.code = data.code;
+          throw error;
+        }
+        if (event === "done") return data.response;
+        updateStreamingProgress(event, data);
+      }
+      if (done) break;
+    }
+    throw new Error("Analysis stream ended without a result.");
   }
 
   function bindHeaderControls(panel, currentCaptured) {
@@ -700,9 +741,12 @@
         identity.localUserId = crypto.randomUUID();
         await chrome.storage.local.set({ localUserId: identity.localUserId });
       }
-      const res = await fetch(`${cfg.apiBase}/api/assessment/analyze`, {
+      activeAnalyzeController?.abort();
+      activeAnalyzeController = new AbortController();
+      const res = await fetch(`${cfg.apiBase}/api/assessment/analyze/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Local-User-Id": identity.localUserId },
+        signal: activeAnalyzeController.signal,
         body: JSON.stringify({
           question: questionText,
           options: safeOptions,
@@ -713,14 +757,10 @@
         })
       });
 
-      const data = await res.json();
       if (!res.ok) {
-        const errorMsg = data.message || data.error || "Failed to analyze question";
-        const errorCode = data.code || "PIPELINE_ERROR";
-        const customErr = new Error(errorMsg);
-        customErr.code = errorCode;
-        throw customErr;
+        throw new Error(`Streaming request failed (${res.status})`);
       }
+      const data = await readAssessmentStream(res);
 
       // Push to session history
       sessionHistory.push({ data, captured });
@@ -730,10 +770,11 @@
     } catch (err) {
       const panel = document.getElementById(PANEL_ID);
       if (panel) {
+        const isCancelled = err.name === "AbortError";
         const isNotConfigured = err.code === "AI_NOT_CONFIGURED" || String(err.message).includes("OPENAI_API_KEY");
         const isRateLimited = err.code === "AI_RATE_LIMITED" || String(err.message).includes("429") || String(err.message).includes("quota");
         panel.querySelector(".examai-body").innerHTML = `
-          ${isNotConfigured ? `
+          ${isCancelled ? `<div class="examai-config-banner"><strong>Analysis cancelled</strong> No answer was generated. Edit the visible question and re-analyze when ready.</div>` : isNotConfigured ? `
             <div class="examai-config-banner">
               <strong>⚠️ AI Key Not Configured</strong>
               Please add <code>OPENAI_API_KEY</code> in <code>server/.env</code> and restart the backend server to enable AI analysis.
@@ -756,6 +797,8 @@
             </div>
           `}`;
       }
+    } finally {
+      activeAnalyzeController = null;
     }
   }
 

@@ -229,6 +229,49 @@ app.post("/api/assessment/analyze", async (req, res) => {
 });
 
 /**
+ * POST streaming variant. It keeps the regular JSON endpoint intact while
+ * exposing only user-visible pipeline progress through server-sent events.
+ */
+app.post("/api/assessment/analyze/stream", async (req, res) => {
+  let cancelled = false;
+  const send = (event, data = {}) => {
+    if (!cancelled && !res.writableEnded) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+  const cancel = () => { cancelled = true; };
+  req.once("aborted", cancel);
+  res.once("close", cancel);
+  try {
+    const rawQuestion = (req.body?.question || req.body?.text || "").trim();
+    if (!rawQuestion || rawQuestion.length < 5) {
+      send("error", { code: "EMPTY_QUESTION", message: "No question detected" });
+      return res.end();
+    }
+    const parseResult = AssessmentAnalyzeRequestSchema.safeParse({ ...req.body, question: rawQuestion });
+    if (!parseResult.success) {
+      send("error", { code: "VALIDATION_ERROR", message: "Validation Error", details: formatZodErrors(parseResult.error) });
+      return res.end();
+    }
+    const response = await processAssessmentQuestion({
+      ...parseResult.data,
+      userId: localUserId(req),
+      onProgress: async (event, data) => {
+        if (cancelled) {
+          const error = new Error("Client cancelled the analysis");
+          error.code = "REQUEST_ABORTED";
+          throw error;
+        }
+        send(event, data);
+      }
+    });
+    send("done", { response });
+  } catch (err) {
+    if (!cancelled) send("error", { code: err.code || "PIPELINE_ERROR", message: err.message || "Analysis failed" });
+  } finally {
+    if (!res.writableEnded) res.end();
+  }
+});
+
+/**
  * POST /api/question/classify - Classify question type & subject
  */
 app.post("/api/question/classify", (req, res) => {

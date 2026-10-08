@@ -27,7 +27,8 @@ function dispatchRequest(app, { method, url, body }) {
     let resBody = null;
     const headers = {};
 
-    const res = {
+    const res = Object.assign(new EventEmitter(), {
+      writableEnded: false,
       status(code) {
         statusCode = code;
         return this;
@@ -46,10 +47,14 @@ function dispatchRequest(app, { method, url, body }) {
         resBody = data;
         resolve({ status: statusCode, body: resBody });
       },
+      write(data) {
+        resBody = `${resBody || ""}${data}`;
+      },
       end() {
+        this.writableEnded = true;
         resolve({ status: statusCode, body: resBody });
       }
-    };
+    });
 
     app.handle(req, res, (err) => {
       if (err) resolve({ status: 500, error: err.message });
@@ -63,6 +68,21 @@ test("API: GET /api/health returns 200 and system status", async () => {
   assert.equal(res.status, 200);
   assert.equal(res.body.status, "ok");
   assert.ok(res.body.service.includes("ExamAssist"));
+});
+
+test("API: streaming analysis emits ordered progress and a terminal done event", async () => {
+  const res = await dispatchRequest(app, {
+    method: "POST",
+    url: "/api/assessment/analyze/stream",
+    body: {
+      question: "Which organelle produces ATP?",
+      options: ["A) Ribosome", "B) Mitochondria", "C) Golgi"]
+    }
+  });
+  assert.equal(res.status, 200);
+  const events = [...String(res.body).matchAll(/^event: (.+)$/gm)].map((match) => match[1]);
+  assert.deepEqual(events, ["classified", "searching", "retrieved", "solving", "verifying", "done"]);
+  assert.match(res.body, /"response"/);
 });
 
 test("API: GET /api/config returns supported question types and modes", async () => {

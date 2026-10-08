@@ -48,8 +48,12 @@ export async function processAssessmentQuestion({
   maxSources = 5,
   mode = "Practice Mode",
   evaluationConfig = null,
-  aiClient = defaultAIClient
+  aiClient = defaultAIClient,
+  onProgress = null
 }) {
+  const progress = async (event, data = {}) => {
+    if (onProgress) await onProgress(event, data);
+  };
   const startTime = Date.now();
   const rawQ = (question || text || "").trim();
   if (!rawQ || rawQ.length < 5) {
@@ -80,6 +84,7 @@ export async function processAssessmentQuestion({
     subject: classification.subject,
     difficulty: classification.difficulty
   });
+  await progress("classified", { questionType: classification.questionType, subject: classification.subject, questionQuality: classification.questionQuality });
 
   // Do not spend retrieval or model calls to force an answer from an unclear
   // prompt. The extension presents this disposition with its edit controls.
@@ -122,6 +127,7 @@ export async function processAssessmentQuestion({
   let agentTrace = null;
   if (evaluationConfig?.toolCallingAgent) {
     try {
+      await progress("solving");
       const agent = await runToolCallingAgent({
         question: classification.rawQuestion,
         classification,
@@ -147,8 +153,10 @@ export async function processAssessmentQuestion({
   if (!reasonedOutput) {
     let sources = [];
     if (classification.webSearchNeeded && !evaluationConfig?.skipSearch) {
+      await progress("searching");
       const queries = await generateSearchQueries(classification.rawQuestion, classification.subject, aiClient);
       sources = await orchestrateSearch(queries, maxSources, classification.rawQuestion, classification.questionType);
+      await progress("retrieved", { count: sources.length });
     }
 
     let courseNotes = [];
@@ -169,6 +177,7 @@ export async function processAssessmentQuestion({
       }
     }
     allSources = [...sources, ...courseNotes];
+    await progress("solving");
     reasonedOutput = await generateReasonedAnswer({
       question: classification.rawQuestion,
       questionType: classification.questionType,
@@ -185,6 +194,7 @@ export async function processAssessmentQuestion({
   }
 
   // 4. Verification Pass & Contradiction Detection
+  await progress("verifying");
   const verification = await runVerificationPass({
     question: classification.rawQuestion,
     directAnswer: typeof reasonedOutput.directAnswer === "object" ? (reasonedOutput.directAnswer?.text || "") : reasonedOutput.directAnswer,
