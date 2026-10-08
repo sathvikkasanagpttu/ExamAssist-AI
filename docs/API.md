@@ -297,6 +297,12 @@ Generates a reasoned solution using specialized domain reasoning strategies (Mat
 
 ## 3. Error Responses
 
+### Tool evidence in assessment responses
+
+Assessment responses include a `toolEvidence` array with the tool, whether it actually executed, and output. Failed requested tools leave the answer `UNVERIFIED`. The panel shows a “Verified by” badge only for entries where `executed` is true. SQL evidence identifies SQLite as the assumed dialect.
+
+`GET /api/health` reports `aiConfigured`, `ragEnabled`, and `sandboxEnabled`. Compose publishes the sandbox test endpoint on local-only port 8791; the API uses the private Compose network.
+
 ### `400 Bad Request` (Zod Validation Failure)
 ```json
 {

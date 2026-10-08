@@ -11,7 +11,7 @@ import { defaultAIClient } from "../aiClient.js";
 import { ACADEMIC_SOLVER_SYSTEM_PROMPT } from "../prompts.js";
 import { buildUserMessage } from "./buildUserMessage.js";
 import { evaluateNumericalContext } from "./calculator.js";
-import { runSandboxedCode } from "./sandboxRunner.js";
+import { runSpecializedSolver, generateMCQCandidates } from "./specializedSolvers.js";
 
 /**
  * Normalizes options into standard lettered objects: [{ option: 'A', text: '...' }]
@@ -267,13 +267,6 @@ export async function generateReasonedAnswer({
     }
   }
 
-  if ((questionType === "CODING" || questionType === "DEBUGGING") && codeSnippet) {
-    const codeRun = runSandboxedCode(codeSnippet);
-    if (codeRun.executed) {
-      deterministicContext += `\nSandboxed code trace (${codeRun.success ? "success" : "runtime error"}):\n${codeRun.output || codeRun.returnValue || codeRun.error || "No output"}`;
-    }
-  }
-
   // 2. PASS 1: Solve Before Searching (temperature 0, NO evidence)
   let pass1 = null;
   try {
@@ -343,7 +336,7 @@ export async function generateReasonedAnswer({
 
   // 4. Assemble final reasoned output
   const chosenResult = tieBreakResult || pass2.parsed || pass1.parsed;
-  const directAnswer = tieBreakResult?.directAnswer || pass2.directAnswer || pass1.directAnswer;
+  let directAnswer = tieBreakResult?.directAnswer || pass2.directAnswer || pass1.directAnswer;
 
   let directAnswerText = "";
   if (typeof directAnswer === "object" && directAnswer !== null) {
@@ -370,6 +363,36 @@ export async function generateReasonedAnswer({
     confidenceReason = `Disagreement between first-principles analysis and retrieved sources was reconciled via tie-break evaluation.`;
   }
 
+  let toolEvidence = [];
+  if (specializedSolvers) {
+    try {
+      const specialized = await runSpecializedSolver({
+        question, questionType, options: normalizedOptions, codeSnippet, mathFormula, sources,
+        llmResult: { ...chosenResult, directAnswer }, aiClient
+      });
+      toolEvidence = specialized.toolEvidence;
+      if (specialized.directAnswer) directAnswer = specialized.directAnswer;
+      if (specialized.confidence) confidence = specialized.confidence;
+      if (specialized.confidenceReason) confidenceReason = specialized.confidenceReason;
+      if (specialized.explanation) chosenResult.explanation = specialized.explanation;
+    } catch {
+      toolEvidence = [{ tool: questionType, executed: false, output: "Specialized solver failed; tool was not run." }];
+      confidence = "UNVERIFIED";
+      confidenceReason = "The specialized solver failed; independent verification is required.";
+    }
+  }
+
+  if (specializedSolvers && normalizedOptions.length >= 2 && ["MCQ", "MULTI_SELECT", "TRUE_FALSE"].includes(questionType)) {
+    const voting = await generateMCQCandidates({
+      question, options: normalizedOptions.map((item) => `${item.option}. ${item.text}`), sources, aiClient, toolEvidence
+    });
+    if (voting.candidate) directAnswer = voting.candidate.directAnswer;
+    if (voting.disagreement) {
+      confidence = "LOW";
+      confidenceReason = "Independent candidates disagreed; the selected answer is based on evidence support where available.";
+    }
+  }
+
   return {
     directAnswer,
     directAnswerText,
@@ -381,6 +404,7 @@ export async function generateReasonedAnswer({
     evidenceUsed: chosenResult.evidenceUsed || [],
     evidenceAgreesWithSolution: !hadDisagreement,
     confidence,
-    confidenceReason
+    confidenceReason,
+    toolEvidence
   };
 }

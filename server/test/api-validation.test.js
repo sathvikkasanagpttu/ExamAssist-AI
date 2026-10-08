@@ -111,7 +111,7 @@ test("API: POST /api/search returns ranked sources", async () => {
   assert.ok(Array.isArray(res.body.sources));
   assert.ok(res.body.sources.length > 0);
   assert.ok(res.body.sources[0].url);
-  assert.ok(typeof res.body.sources[0].authority === "number");
+  assert.ok(["HIGH", "MEDIUM", "LOW", "UNASSESSED"].includes(res.body.sources[0].authorityTier));
 });
 
 test("API: POST /api/evidence/verify returns claim verification", async () => {

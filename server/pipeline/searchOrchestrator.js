@@ -74,8 +74,7 @@ export async function generateSearchQueries(question, subject, aiClient = defaul
 }
 
 /**
- * Score authority and relevance for each source (0-100).
- * Relevance is prioritized first.
+ * Derive private ranking signals and expose only categorical source tiers.
  */
 export function scoreSource(source, questionWords) {
   if (source.provider === "mock" && typeof source.relevance === "number") {
@@ -151,19 +150,16 @@ export async function orchestrateSearch(queries, maxResults = 5, rawQuestion = "
       url: src.url,
       domain: src.domain || extractDomain(src.url),
       snippet: (src.snippet || "").trim(),
-      authority: scores.authority,
-      relevance: scores.relevance
+      authorityTier: scores.authority >= 85 ? "HIGH" : scores.authority < 50 ? "LOW" : "MEDIUM",
+      relevanceTier: scores.relevance >= 75 ? "HIGH" : scores.relevance < 45 ? "LOW" : "MEDIUM",
+      _rank: (scores.relevance * 0.7) + (scores.authority * 0.3)
     });
   }
 
   // Priority 3: Rank sources by relevance to question first (70%), then authority (30%)
-  scoredSources.sort((a, b) => {
-    const scoreA = (a.relevance * 0.7) + (a.authority * 0.3);
-    const scoreB = (b.relevance * 0.7) + (b.authority * 0.3);
-    return scoreB - scoreA;
-  });
+  scoredSources.sort((a, b) => b._rank - a._rank);
 
-  const finalResults = scoredSources.slice(0, maxResults);
+  const finalResults = scoredSources.slice(0, maxResults).map(({ _rank, ...source }) => source);
   globalCache.set(cacheKey, finalResults);
   return finalResults;
 }

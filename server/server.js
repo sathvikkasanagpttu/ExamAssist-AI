@@ -17,6 +17,7 @@ import { generateReasonedAnswer } from "./pipeline/reasoningEngine.js";
 import { runVerificationPass } from "./pipeline/verificationPass.js";
 import { defaultAIClient, AIError, AIConfigError } from "./aiClient.js";
 import { getActiveSearchProvider } from "./pipeline/search.js";
+import { sandboxHealth } from "./pipeline/sandboxClient.js";
 import multer from "multer";
 import {
   deleteDocument,
@@ -97,6 +98,7 @@ app.get(["/health", "/api/health"], async (_req, res) => {
     uptimeSeconds: Math.floor(process.uptime()),
     aiConfigured: defaultAIClient.isConfigured,
     ragEnabled: ragEnabled(),
+    sandboxEnabled: await sandboxHealth(),
     searchProvider: getActiveSearchProvider(),
     model: defaultAIClient.model,
     pipelineSteps: [

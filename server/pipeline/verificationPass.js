@@ -13,7 +13,7 @@ function formatSourcesText(sources) {
     if (s.type === "course_notes") {
       return `[${i + 1}] User course note: ${s.file || s.title || "document"}${s.page == null ? "" : `, page ${s.page}`}\nSnippet: ${s.snippet || ""}`;
     }
-    return `[${i + 1}] Title: ${s.title}\nURL: ${s.url}\nAuthority: ${s.authority}/100\nSnippet: ${s.snippet || ""}`;
+    return `[${i + 1}] Title: ${s.title}\nURL: ${s.url}\nSource tier: ${s.authorityTier || "UNASSESSED"}; relevance: ${s.relevanceTier || "UNASSESSED"}\nSnippet: ${s.snippet || ""}`;
   }).join("\n\n");
 }
 

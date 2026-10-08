@@ -156,8 +156,6 @@ export async function runExamAIPipeline(questionText, options = {}, aiClient = d
       url: s.url,
       domain: s.domain,
       quality: s.quality,
-      authority_score: s.authority_score,
-      relevance_score: s.relevance_score,
       reason: s.evaluation_reason || s.snippet
     })),
     formattedText: finalResult.formattedText,

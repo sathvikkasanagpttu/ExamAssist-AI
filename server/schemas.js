@@ -83,11 +83,15 @@ export const AnswerGenerateRequestSchema = z.object({
 
 // Response Schemas
 export const SourceItemSchema = z.object({
-  title: z.string(),
-  url: z.string(),
-  domain: z.string(),
-  authority: z.number().min(0).max(100),
-  relevance: z.number().min(0).max(100),
+  type: z.enum(["web", "course_notes"]),
+  title: z.string().optional(),
+  url: z.string().optional(),
+  domain: z.string().optional(),
+  file: z.string().optional(),
+  page: z.number().nullable().optional(),
+  section: z.string().nullable().optional(),
+  authorityTier: z.enum(["HIGH", "MEDIUM", "LOW", "UNASSESSED"]).optional(),
+  relevanceTier: z.enum(["HIGH", "MEDIUM", "LOW", "UNASSESSED"]).optional(),
   snippet: z.string().optional()
 });
 
@@ -124,6 +128,10 @@ export const AssessmentResponseSchema = z.object({
   explanation: z.string(),
   reasoningSteps: z.array(z.string()),
   optionAnalysis: z.array(OptionAnalysisItemSchema),
+  toolEvidence: z.array(z.object({
+    tool: z.string(), executed: z.boolean(), success: z.boolean().optional(), output: z.string(),
+    language: z.string().optional(), dialect: z.string().optional(), expression: z.string().optional()
+  })).optional(),
   verification: z.object({
     status: VerificationStatusEnum,
     supported: z.array(z.string()),

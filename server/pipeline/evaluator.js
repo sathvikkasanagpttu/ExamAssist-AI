@@ -33,7 +33,7 @@ function calculateHeuristicScore(source, question, keywords) {
   } else if (domain.includes("developer.mozilla.org") || domain.includes("docs.python.org") || domain.includes("w3.org")) {
     authority = 90;
     isPrimary = true;
-  } else if (domain.includes("reddit.com") || domain.includes("quora.com") || domain.includes("medium.com") || domain.includes("blogspot.com")) {
+  } else if (domain.includes("reddit.com") || domain.includes("quora.com") || domain.includes("medium.com") || domain.includes("blogspot.com") || domain.includes("blog")) {
     authority = 42;
   }
 
@@ -48,8 +48,6 @@ function calculateHeuristicScore(source, question, keywords) {
   const relevance = Math.min(100, Math.round(50 + (matchRatio * 50)));
 
   // Evidence score
-  const evidence = Math.round((authority * 0.5) + (relevance * 0.5));
-
   let quality = "MEDIUM";
   if (authority >= 85 && relevance >= 70) quality = "HIGH";
   else if (authority < 50 || relevance < 40) quality = "LOW";
@@ -59,11 +57,12 @@ function calculateHeuristicScore(source, question, keywords) {
     ? `Authoritative institutional/academic source with high domain verification (${domain}).`
     : `Standard reference material with ${matchedKeywords} matching concept keywords.`;
 
+  const authorityTier = authority >= 85 ? "HIGH" : authority < 50 ? "LOW" : "MEDIUM";
+  const relevanceTier = relevance >= 75 ? "HIGH" : relevance < 45 ? "LOW" : "MEDIUM";
   return {
     url: source.url,
-    authority_score: authority,
-    relevance_score: relevance,
-    evidence_score: evidence,
+    authorityTier,
+    relevanceTier,
     quality,
     reason
   };
@@ -92,12 +91,11 @@ export async function evaluateSources(sources, analysis, aiClient = defaultAICli
     if (Array.isArray(aiEvaluation) && aiEvaluation.length > 0) {
       return sources.map(src => {
         const evalItem = aiEvaluation.find(e => e.url === src.url);
-        if (evalItem && evalItem.authority_score !== undefined) {
+        if (evalItem && evalItem.authorityTier) {
           return {
             ...src,
-            authority_score: Number(evalItem.authority_score),
-            relevance_score: Number(evalItem.relevance_score || 75),
-            evidence_score: Number(evalItem.evidence_score || 75),
+            authorityTier: evalItem.authorityTier,
+            relevanceTier: evalItem.relevanceTier || "UNASSESSED",
             quality: evalItem.quality || "MEDIUM",
             evaluation_reason: evalItem.reason || "Evaluated against academic standards."
           };
@@ -105,9 +103,8 @@ export async function evaluateSources(sources, analysis, aiClient = defaultAICli
         const fallbackScores = calculateHeuristicScore(src, rawQuestion, keywords);
         return {
           ...src,
-          authority_score: fallbackScores.authority_score,
-          relevance_score: fallbackScores.relevance_score,
-          evidence_score: fallbackScores.evidence_score,
+          authorityTier: fallbackScores.authorityTier,
+          relevanceTier: fallbackScores.relevanceTier,
           quality: fallbackScores.quality,
           evaluation_reason: fallbackScores.reason
         };
@@ -122,9 +119,8 @@ export async function evaluateSources(sources, analysis, aiClient = defaultAICli
     const scores = calculateHeuristicScore(src, rawQuestion, keywords);
     return {
       ...src,
-      authority_score: scores.authority_score,
-      relevance_score: scores.relevance_score,
-      evidence_score: scores.evidence_score,
+      authorityTier: scores.authorityTier,
+      relevanceTier: scores.relevanceTier,
       quality: scores.quality,
       evaluation_reason: scores.reason
     };

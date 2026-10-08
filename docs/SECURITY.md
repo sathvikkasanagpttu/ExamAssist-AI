@@ -62,6 +62,10 @@ ExamAssist AI provides two distinct operating modes:
 
 ## 5. Network Hardening & Defense-in-Depth
 
+### Restricted solver execution
+
+The assessment API never executes submitted code on its own host. Compose provides a separate sandbox container with a read-only root filesystem, memory/CPU/process limits, and an isolated internal network. Its small supervisor process runs as root with only `CHOWN`, `SETPCAP`, `SYS_ADMIN`, and `NET_ADMIN` so it can prepare an unprivileged workspace and Bubblewrap namespaces on Docker Desktop; the submitted program runs as UID 10002 with no capabilities, a read-only filesystem view, no network, and a per-run temporary directory. The helper is masked from submitted code after setup. The service enforces a short timeout and bounded output. SQL runs against a new in-memory SQLite database and accepts only a single read query. If the sandbox is missing or a tool fails, the response remains `UNVERIFIED` and does not claim execution.
+
 | Security Control | Implementation | Purpose |
 | :--- | :--- | :--- |
 | **Sliding Window Rate Limiter** | `server/rateLimiter.js` (120 req/min/IP) | Prevents denial-of-service and downstream API quota exhaustion. |

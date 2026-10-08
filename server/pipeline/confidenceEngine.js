@@ -30,8 +30,8 @@ export function computeConfidence({
   }
 
   // Count high authority sources (authority >= 85)
-  const highAuthCount = sources.filter(s => (s.authority || 0) >= 85).length;
-  const highRelCount = sources.filter(s => (s.relevance || 0) >= 75).length;
+  const highAuthCount = sources.filter(s => s.authorityTier === "HIGH" || (s.authority || 0) >= 85).length;
+  const highRelCount = sources.filter(s => s.relevanceTier === "HIGH" || (s.relevance || 0) >= 75).length;
 
   // High confidence criteria: at least 2 authoritative sources agree and high relevance
   if (highAuthCount >= 2 && highRelCount >= 2 && verificationStatus === "SUPPORTED") {

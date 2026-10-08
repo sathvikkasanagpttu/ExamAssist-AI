@@ -32,7 +32,7 @@ Designed for students working through practice exams, problem sets, textbook rev
 ### Priority 3: Multi-Angle Search & Deduplication
 - **Multi-Provider Support**: Supports Tavily (`TAVILY_API_KEY`), Serper (`SERPER_API_KEY`), and Brave Search (`BRAVE_SEARCH_API_KEY` or `BRAVE_API_KEY`).
 - **Free Wikipedia Fallback**: If no search API key is configured, uses Wikipedia's OpenSearch API for definitional concepts. If even Wikipedia returns nothing, returns 0 sources (never injects fake citations).
-- **Relevance-First Ranking**: Ranks sources by 70% relevance to question keywords and 30% domain authority (`.gov`, `.edu`, peer-reviewed journals).
+- **Relevance-First Ranking**: Prioritizes matches to the question and categorical source authority tiers (`.gov`, `.edu`, peer-reviewed journals); response source quality is labeled by category rather than a fabricated numeric score.
 - **Search Skipping**: Pure mathematics and coding questions skip search and proceed directly to solving.
 
 ### Priority 4: User-Controlled Chrome MV3 Extension
@@ -237,7 +237,7 @@ Configs `a_single_pass` through `e_specialized` are in `server/eval/configs/`. E
 
 ## Course Notes (optional RAG)
 
-Run `docker compose up --build -d` to start the backend and Postgres/pgvector. The database persists in the `course-notes-data` volume and is not exposed as a host port. Course Notes can also be disabled by leaving `KB_DATABASE_URL` unset when running the backend directly; `/api/health` reports `ragEnabled:false`. Configure `OPENAI_API_KEY` on the backend for embeddings and AI reranking. Open extension Options → Course Notes to upload or delete PDF, DOCX, Markdown, or TXT files and view storage use. Review [docs/PRIVACY.md](docs/PRIVACY.md) before uploading sensitive study material.
+Run `docker compose up --build -d` to start the backend, Postgres/pgvector, and the restricted solver sandbox. The database persists in the `course-notes-data` volume and is not exposed as a host port. Course Notes can also be disabled by leaving `KB_DATABASE_URL` unset when running the backend directly; `/api/health` reports `ragEnabled:false`. The sandbox uses a non-root container with resource caps and network-isolated execution; health reports `sandboxEnabled`. Configure `OPENAI_API_KEY` on the backend for embeddings and AI reranking. Open extension Options → Course Notes to upload or delete PDF, DOCX, Markdown, or TXT files and view storage use. Review [docs/PRIVACY.md](docs/PRIVACY.md) before uploading sensitive study material.
 
 For a live `c_solve_tiebreak` vs `d_rag` eval, set `EVAL_LOCAL_USER_ID` to the profile ID that owns the fixture notes; the eval runner will query only that profile's documents.
 

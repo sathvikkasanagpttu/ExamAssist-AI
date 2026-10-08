@@ -333,24 +333,10 @@ const codingSandboxCases = [
   }
 ];
 
-test("Academic Suite: 10 Coding / Sandbox Execution Cases (Node vm)", () => {
+test("Legacy host runner refuses all code because execution is Docker-only", () => {
   for (const item of codingSandboxCases) {
     const res = runSandboxedCode(item.code);
-
-    if (item.expectError) {
-      assert.equal(res.success, false, `${item.name}: Should fail execution on syntax error`);
-      assert.ok(res.error, `${item.name}: Error message should be populated`);
-    } else if (item.expectTimeout) {
-      assert.equal(res.success, false, `${item.name}: Infinite loop should terminate`);
-      assert.ok(res.error.toLowerCase().includes("timeout") || res.error.toLowerCase().includes("timed out"),
-        `${item.name}: Should report timeout`);
-    } else if (item.expectedOutput) {
-      assert.equal(res.success, true);
-      assert.ok(res.output.includes(item.expectedOutput), `${item.name}: Output should contain logged string`);
-    } else {
-      assert.equal(res.success, true, `${item.name}: Execution should succeed`);
-      assert.equal(res.returnValue, item.expectedReturn, `${item.name}: Return value should match expected`);
-    }
+    assert.equal(res.executed, false, `${item.name}: backend host must never execute supplied code`);
   }
 });
 

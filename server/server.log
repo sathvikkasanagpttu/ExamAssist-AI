@@ -26,3 +26,41 @@ ExamAssist AI Server active on http://localhost:8787
 {"timestamp":"2026-10-06T12:34:22.747Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":2820}
 {"timestamp":"2026-10-06T12:35:43.149Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"DEBUGGING","subject":"Computer Science","difficulty":"Advanced"}
 {"timestamp":"2026-10-06T12:35:46.263Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"DEBUGGING","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":3118}
+{"timestamp":"2026-10-08T10:56:48.095Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"Computer Science","difficulty":"Intermediate"}
+{"timestamp":"2026-10-08T10:56:51.273Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":3181}
+{"timestamp":"2026-10-08T10:57:13.435Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"Biology","difficulty":"Intermediate"}
+{"timestamp":"2026-10-08T10:57:15.693Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":2258}
+{"timestamp":"2026-10-08T10:57:32.206Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"Computer Science","difficulty":"Intermediate"}
+{"timestamp":"2026-10-08T10:57:35.152Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":2946}
+{"timestamp":"2026-10-08T10:57:43.315Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"Computer Science","difficulty":"Intermediate"}
+{"timestamp":"2026-10-08T10:57:45.802Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":2487}
+{"timestamp":"2026-10-08T10:57:52.793Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"Computer Science","difficulty":"Intermediate"}
+{"timestamp":"2026-10-08T10:57:57.838Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":5045}
+{"timestamp":"2026-10-08T10:58:04.794Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"Computer Science","difficulty":"Introductory"}
+{"timestamp":"2026-10-08T10:58:07.614Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":2820}
+{"timestamp":"2026-10-08T10:58:33.566Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"General Academic","difficulty":"Intermediate"}
+{"timestamp":"2026-10-08T10:58:36.454Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":2892}
+{"timestamp":"2026-10-08T10:58:43.991Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"Computer Science","difficulty":"Intermediate"}
+{"timestamp":"2026-10-08T10:58:48.483Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":4493}
+{"timestamp":"2026-10-08T10:58:55.434Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"General Academic","difficulty":"Intermediate"}
+{"timestamp":"2026-10-08T10:58:58.082Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":2649}
+{"timestamp":"2026-10-08T10:59:04.216Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"Chemistry","difficulty":"Intermediate"}
+{"timestamp":"2026-10-08T10:59:09.572Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":5357}
+{"timestamp":"2026-10-08T10:59:14.308Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"General Academic","difficulty":"Intermediate"}
+{"timestamp":"2026-10-08T10:59:16.826Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":2518}
+{"timestamp":"2026-10-08T10:59:21.350Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"Computer Science","difficulty":"Intermediate"}
+{"timestamp":"2026-10-08T10:59:24.189Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":2839}
+{"timestamp":"2026-10-08T10:59:53.127Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"General Academic","difficulty":"Intermediate"}
+{"timestamp":"2026-10-08T10:59:56.533Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":3407}
+{"timestamp":"2026-10-08T11:00:07.126Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"General Academic","difficulty":"Intermediate"}
+{"timestamp":"2026-10-08T11:00:09.845Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":2719}
+{"timestamp":"2026-10-08T11:00:17.128Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"General Academic","difficulty":"Intermediate"}
+{"timestamp":"2026-10-08T11:00:19.706Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":2578}
+{"timestamp":"2026-10-08T11:00:27.632Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"Computer Science","difficulty":"Intermediate"}
+{"timestamp":"2026-10-08T11:00:32.286Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":4655}
+{"timestamp":"2026-10-08T11:00:39.732Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"General Academic","difficulty":"Intermediate"}
+{"timestamp":"2026-10-08T11:00:42.690Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":2959}
+{"timestamp":"2026-10-08T11:00:51.882Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"Chemistry","difficulty":"Intermediate"}
+{"timestamp":"2026-10-08T11:00:54.736Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":2855}
+{"timestamp":"2026-10-08T11:01:30.767Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"CODING","subject":"Computer Science","difficulty":"Advanced"}
+{"timestamp":"2026-10-08T11:01:33.538Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"CODING","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":2776}

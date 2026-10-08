@@ -118,7 +118,7 @@ export async function processAssessmentQuestion({
     mathFormula,
     aiClient,
     skipTieBreak: Boolean(evaluationConfig?.skipTieBreak),
-    specializedSolvers: Boolean(evaluationConfig?.specializedSolvers)
+    specializedSolvers: evaluationConfig ? Boolean(evaluationConfig.specializedSolvers) : true
   });
 
   // 4. Verification Pass & Contradiction Detection
@@ -129,6 +129,10 @@ export async function processAssessmentQuestion({
     sources: allSources,
     aiClient
   });
+  if (reasonedOutput.toolEvidence?.some((item) => !item.executed || !item.success)) {
+    verification.status = "UNVERIFIED";
+    verification.unsupported = [...(verification.unsupported || []), "A requested deterministic tool did not execute."];
+  }
 
   // 5. Confidence Engine Calibration
   const engineResult = computeConfidence({
@@ -172,6 +176,7 @@ export async function processAssessmentQuestion({
     explanation: reasonedOutput.explanation,
     reasoningSteps: reasonedOutput.reasoningSteps,
     optionAnalysis: reasonedOutput.optionAnalysis,
+    toolEvidence: reasonedOutput.toolEvidence || [],
     evidenceUsed: reasonedOutput.evidenceUsed || [],
     evidenceAgreesWithSolution: reasonedOutput.evidenceAgreesWithSolution !== undefined ? reasonedOutput.evidenceAgreesWithSolution : true,
     verification: {
@@ -185,8 +190,8 @@ export async function processAssessmentQuestion({
       title: s.title,
       url: s.url,
       domain: s.domain,
-      authority: s.authority,
-      relevance: s.relevance,
+      authorityTier: s.authorityTier,
+      relevanceTier: s.relevanceTier,
       snippet: s.snippet
     })),
     retrievalTimestamp: new Date().toISOString()

@@ -15,7 +15,7 @@ import { defaultAIClient } from "../aiClient.js";
 function formatSourcesForPrompt(sources) {
   if (!sources || sources.length === 0) return "No external sources retrieved. Independent verification required.";
   return sources.map((s, i) =>
-    `[${i + 1}] Title: ${s.title}\nURL: ${s.url}\nQuality: ${s.quality || "MEDIUM"} (Authority: ${s.authority_score || 70}/100)\nContent: ${s.snippet || "N/A"}`
+    `[${i + 1}] Title: ${s.title}\nURL: ${s.url}\nSource tier: ${s.authorityTier || s.quality || "UNASSESSED"}\nContent: ${s.snippet || "N/A"}`
   ).join("\n\n");
 }
 
@@ -73,10 +73,5 @@ Provide:
     console.warn("[AnswerDrafter] Error drafting answer:", err.message);
   }
 
-  // Fallback draft based on category
-  if (isMCQ && options.length > 0) {
-    return `Correct option:\n${options[0]}\n\nReason:\nBased on standard academic definitions and reference sources.\n\nWhy other options are less suitable:\nAlternative choices do not align with core terminology.\n\nEvidence level:\nMEDIUM`;
-  }
-
-  return `Direct Answer:\nThe concept corresponds to established principles supported by academic reference sources.\n\nExplanation:\nEvidence from retrieved publications highlights the underlying mechanisms and definitions.\n\nKey Points:\n- Grounded in authoritative documentation\n- Consistent with academic consensus`;
+  return `Direct Answer: UNVERIFIED\n\nExplanation: The answer could not be generated or verified because the AI service was unavailable.\n\nEvidence level: UNVERIFIED`;
 }

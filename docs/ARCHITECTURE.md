@@ -134,10 +134,7 @@ For questions requiring web retrieval, the search orchestrator formulates **3 to
 - **Verification Query**: Confirmatory search testing candidate hypotheses.
 - **Counter-Evidence Query**: Targeted search for alternative views or conflicting claims.
 
-Sources are deduplicated and scored using domain authority heuristics:
-- **Authority (0–100)**: Higher weights for `.edu`, `.gov`, PubMed, NCBI, IEEE, Nature, Science, Wikipedia.
-- **Relevance (0–100)**: Keyword density and title/snippet alignment.
-- **Recency**: Timestamps where applicable.
+Sources are deduplicated and ranked with internal domain and text matching heuristics. The response exposes categorical authority and relevance tiers (`HIGH`, `MEDIUM`, `LOW`, or `UNASSESSED`) rather than fabricated numeric source scores. Recency is included only when the provider supplies it.
 
 ---
 

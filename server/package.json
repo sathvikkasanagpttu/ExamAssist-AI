@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "lint": "node scripts/lint.mjs",
     "test": "node --test test/*.test.js",
     "eval": "node eval/runner.mjs",
     "eval:smoke": "node eval/runner.mjs --smoke --limit 10"

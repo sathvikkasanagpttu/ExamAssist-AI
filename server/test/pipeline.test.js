@@ -76,7 +76,8 @@ test("Source Evaluator scores institutional and reference domains", async () => 
 
   const evaluated = await evaluateSources(sources, analysis);
   assert.equal(evaluated.length, 2);
-  assert.ok(evaluated[0].authority_score > evaluated[1].authority_score, "Institutional source should have higher authority");
+  assert.equal(evaluated[0].authorityTier, "HIGH", "Institutional source should have a high authority tier");
+  assert.equal(evaluated[1].authorityTier, "LOW", "Low-trust blog should have a low authority tier");
   assert.equal(evaluated[0].quality, "HIGH");
 });
 
@@ -165,4 +166,3 @@ test("Verifier assigns UNVERIFIED when no sources are available", async () => {
   const verification = await verifyEvidence("Obscure unindexed question?", "Unverified answer.", [], contradictionResult);
   assert.equal(verification.overall_evidence_level, "UNVERIFIED");
 });
-

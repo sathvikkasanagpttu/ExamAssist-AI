@@ -271,10 +271,9 @@ For each source, evaluate:
 6. Potential bias
 7. Whether the source directly supports the question
 
-Assign:
-authority_score: 0–100
-relevance_score: 0–100
-evidence_score: 0–100
+Assign categorical assessments only:
+authorityTier: HIGH | MEDIUM | LOW | UNASSESSED
+relevanceTier: HIGH | MEDIUM | LOW | UNASSESSED
 
 Calculate an overall quality classification:
 HIGH
@@ -308,9 +307,8 @@ OUTPUT JSON ONLY:
 [
   {
     "url": "...",
-    "authority_score": 0,
-    "relevance_score": 0,
-    "evidence_score": 0,
+    "authorityTier": "UNASSESSED",
+    "relevanceTier": "UNASSESSED",
     "quality": "HIGH",
     "reason": "..."
   }

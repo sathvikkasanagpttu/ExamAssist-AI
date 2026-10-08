@@ -499,7 +499,7 @@
         </a>
         <div class="examai-source-meta">
           <span>${esc(s.domain || "web")}</span>
-          <span class="examai-source-score">Relevance ${s.relevance || 75}%</span>
+          ${s.relevanceTier ? `<span class="examai-source-score">Relevance: ${esc(s.relevanceTier)}</span>` : ""}
         </div>
       </div>
     `).join("");
@@ -516,6 +516,16 @@
 
     // Verification Status Badge
     const vStatus = data.verification?.status || "UNVERIFIED";
+    const toolRecords = data.toolEvidence || [];
+    const toolNames = { mathjs: "calculator", SymPy: "calculator", sandbox: "sandbox run", sqlite: "SQL execution" };
+    const toolEvidenceHtml = toolRecords.length ? `
+      <div class="examai-label">Tool verification</div>
+      <div class="examai-tool-evidence">
+        ${toolRecords.map(tool => `
+          ${tool.executed && tool.success ? `<span class="examai-tool-badge">Verified by: ${esc(toolNames[tool.tool] || tool.tool)}</span>` : `<span class="examai-tool-failed">${esc(toolNames[tool.tool] || tool.tool)}: not verified</span>`}
+          <details><summary>View tool output</summary><pre>${esc(tool.output || "No output")}</pre></details>
+        `).join("")}
+      </div>` : "";
 
     const safeOptionsCount = Array.isArray(captured?.options) && captured.options.length > 0
       ? captured.options.length
@@ -557,6 +567,7 @@
           <span class="examai-confidence-badge ${confClass}">● ${esc(confLevel)} (${esc(vStatus)})</span>
         </div>
         <div class="examai-notes-box">${esc(data.confidenceReason || "Verified against academic principles.")}</div>
+        ${toolEvidenceHtml}
 
         ${conflictHtml}
         ${optionsHtml}
