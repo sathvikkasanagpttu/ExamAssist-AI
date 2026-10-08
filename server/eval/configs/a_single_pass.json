@@ -1,0 +1,8 @@
+{
+  "name": "a_single_pass",
+  "description": "Baseline: single reasoning pass, no web search, no tie-break, no RAG, no specialized solvers.",
+  "skipSearch": true,
+  "skipTieBreak": true,
+  "ragEnabled": false,
+  "specializedSolvers": false
+}

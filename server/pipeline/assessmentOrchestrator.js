@@ -44,6 +44,7 @@ export async function processAssessmentQuestion({
   mathFormula = "",
   maxSources = 5,
   mode = "Practice Mode",
+  evaluationConfig = null,
   aiClient = defaultAIClient
 }) {
   const startTime = Date.now();
@@ -79,7 +80,7 @@ export async function processAssessmentQuestion({
 
   // 2. Multi-Angle Search Orchestration (Priority 3: relevance-first, skipped for pure math/code)
   let sources = [];
-  if (classification.webSearchNeeded) {
+  if (classification.webSearchNeeded && !evaluationConfig?.skipSearch) {
     const queries = await generateSearchQueries(classification.rawQuestion, classification.subject, aiClient);
     sources = await orchestrateSearch(queries, maxSources, classification.rawQuestion, classification.questionType);
   }
@@ -94,7 +95,9 @@ export async function processAssessmentQuestion({
     sources,
     codeSnippet,
     mathFormula,
-    aiClient
+    aiClient,
+    skipTieBreak: Boolean(evaluationConfig?.skipTieBreak),
+    specializedSolvers: Boolean(evaluationConfig?.specializedSolvers)
   });
 
   // 4. Verification Pass & Contradiction Detection

@@ -223,6 +223,18 @@ npm test
 | `POST` | `/api/evidence/verify` | Claim verification and contradiction detection pass |
 | `POST` | `/api/answer/generate` | Domain reasoning with solve-before-search and mathjs/sandbox trace |
 
+## Evaluation harness
+
+The labeled practice set lives at `server/eval/dataset.jsonl`. Run one ablation configuration or a smaller slice with:
+
+```bash
+cd server
+npm run eval -- --config c_solve_tiebreak --limit 25
+npm run eval:smoke
+```
+
+Configs `a_single_pass` through `e_specialized` are in `server/eval/configs/`. Each run writes a JSON result and Markdown report under `server/eval/results/`; per-question cache entries are under `server/eval/cache/`. The report breaks accuracy down by subject, question type, and difficulty, shows calibration by confidence, UNVERIFIED rate, latency percentiles, token usage, and cost when a rate is configured. `EVAL_MAX_CALLS` caps provider calls (default 200), and `EVAL_CONCURRENCY` controls live parallelism. Set `EVAL_COST_PER_1K_TOKENS_USD` to record an estimated cost using your own provider rate; without a rate, cost is reported as unavailable. Provider-reported token totals are preferred; fallback token counts are explicitly estimates. Smoke mode uses a mock AI and is only a CI plumbing check; its accuracy is not representative. Check `server/eval/REVIEW.md` and resolve `needsReview` rows before treating full-set accuracy as final.
+
 ---
 
 ## 🔒 Academic Integrity & Safety

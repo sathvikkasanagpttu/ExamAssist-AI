@@ -249,6 +249,8 @@ export async function generateReasonedAnswer({
   sources = [],
   codeSnippet = "",
   mathFormula = "",
+  skipTieBreak = false,
+  specializedSolvers = false,
   aiClient = defaultAIClient
 }) {
   const normalizedOptions = normalizeOptionsList(options);
@@ -320,16 +322,18 @@ export async function generateReasonedAnswer({
 
       if (disagree) {
         hadDisagreement = true;
-        // Priority 2 point 6: Run third tie-break call that sees both
-        tieBreakResult = await runTieBreakPass({
-          question,
-          normalizedOptions,
-          questionType,
-          pass1,
-          pass2,
-          sources,
-          aiClient
-        });
+        if (!skipTieBreak) {
+          // Priority 2 point 6: Run third tie-break call that sees both
+          tieBreakResult = await runTieBreakPass({
+            question,
+            normalizedOptions,
+            questionType,
+            pass1,
+            pass2,
+            sources,
+            aiClient
+          });
+        }
       }
     } catch (err) {
       console.warn("[ReasoningEngine] Pass 2 failed, falling back to Pass 1:", err.message);

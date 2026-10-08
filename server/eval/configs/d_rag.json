@@ -1,0 +1,8 @@
+{
+  "name": "d_rag",
+  "description": "Full pipeline + Course Knowledge Base (RAG). Falls back gracefully if DB not available.",
+  "skipSearch": false,
+  "skipTieBreak": false,
+  "ragEnabled": true,
+  "specializedSolvers": false
+}

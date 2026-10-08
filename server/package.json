@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "eval": "node eval/runner.mjs",
+    "eval:smoke": "node eval/runner.mjs --smoke --limit 10"
   },
   "dependencies": {
     "cors": "^2.8.5",

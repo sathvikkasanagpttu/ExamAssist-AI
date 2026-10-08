@@ -1,0 +1,8 @@
+{
+  "name": "c_solve_tiebreak",
+  "description": "Full pipeline: solve-first + evidence + tie-break. No RAG, no specialized solvers.",
+  "skipSearch": false,
+  "skipTieBreak": false,
+  "ragEnabled": false,
+  "specializedSolvers": false
+}

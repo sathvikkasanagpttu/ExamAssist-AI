@@ -130,6 +130,34 @@ test("Disagreement: Solver passes disagreeing on answer triggers tie-break and L
   assert.equal(result.evidenceAgreesWithSolution, false);
 });
 
+test("Evaluation ablation can skip tie-break while keeping disagreement LOW confidence", async () => {
+  let calls = 0;
+  const mockClient = new AIClient({
+    apiKey: "test-mock-key",
+    mockHandler: async () => {
+      calls++;
+      const option = calls === 1 ? "A" : "B";
+      return JSON.stringify({
+        directAnswer: { option, text: `Option ${option}` },
+        ownSolution: `Option ${option}`,
+        explanation: `Pass ${calls}`,
+        confidence: "HIGH"
+      });
+    }
+  });
+  const result = await generateReasonedAnswer({
+    question: "Ablation disagreement test question?",
+    questionType: "MCQ",
+    options: ["Option A", "Option B"],
+    sources: [{ title: "Retrieved source", url: "https://example.edu/ref", snippet: "Evidence", authority: 90, relevance: 90 }],
+    skipTieBreak: true,
+    aiClient: mockClient
+  });
+  assert.equal(calls, 2);
+  assert.equal(result.confidence, "LOW");
+  assert.equal(result.evidenceAgreesWithSolution, false);
+});
+
 test("Verification: No sources strictly returns status UNVERIFIED", async () => {
   const result = await runVerificationPass({
     question: "What is quantum superposition?",

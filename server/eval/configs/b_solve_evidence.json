@@ -1,0 +1,8 @@
+{
+  "name": "b_solve_evidence",
+  "description": "Solve-first pass + evidence pass (no tie-break, no RAG, no specialized solvers).",
+  "skipSearch": false,
+  "skipTieBreak": true,
+  "ragEnabled": false,
+  "specializedSolvers": false
+}

@@ -1,0 +1,8 @@
+{
+  "name": "e_specialized",
+  "description": "Full pipeline + RAG + specialized solvers (math calculator, coding sandbox, SQL executor, MCQ voting).",
+  "skipSearch": false,
+  "skipTieBreak": false,
+  "ragEnabled": true,
+  "specializedSolvers": true
+}

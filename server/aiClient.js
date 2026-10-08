@@ -89,6 +89,7 @@ export class AIClient {
     this.model = options.model || process.env.OPENAI_MODEL || "gpt-4o";
     this.baseURL = options.baseURL || process.env.OPENAI_BASE_URL || undefined;
     this.mockHandler = options.mockHandler || null;
+    this.usageMetrics = options.usageMetrics || null;
 
     if (this.apiKey && this.apiKey !== "replace_me" && this.apiKey.trim().length > 0) {
       this.openai = new OpenAI({
@@ -117,8 +118,21 @@ export class AIClient {
     temperature = 0.2,
     timeoutMs = 30000
   }) {
+    if (this.usageMetrics) {
+      if (Number.isFinite(this.usageMetrics.maxCalls) && this.usageMetrics.calls >= this.usageMetrics.maxCalls) {
+        const error = new Error("EVAL_MAX_CALLS_REACHED");
+        error.code = "EVAL_MAX_CALLS_REACHED";
+        throw error;
+      }
+      this.usageMetrics.calls++;
+    }
     if (this.mockHandler) {
-      return await this.mockHandler({ systemPrompt, userPrompt, json, temperature });
+      const content = await this.mockHandler({ systemPrompt, userPrompt, json, temperature });
+      if (this.usageMetrics) {
+        this.usageMetrics.estimatedPromptTokens += Math.ceil(`${systemPrompt || ""}${userPrompt || ""}`.length / 4);
+        this.usageMetrics.estimatedCompletionTokens += Math.ceil(String(content || "").length / 4);
+      }
+      return content;
     }
 
     if (!this.isConfigured || !this.openai) {
@@ -166,6 +180,14 @@ export class AIClient {
         const content = response.choices?.[0]?.message?.content;
         if (typeof content !== "string") {
           throw new AIUnavailableError("Empty completion content received from AI provider");
+        }
+        if (this.usageMetrics) {
+          const usage = response.usage;
+          if (usage?.total_tokens != null) this.usageMetrics.providerTokens += usage.total_tokens;
+          else {
+            this.usageMetrics.estimatedPromptTokens += Math.ceil(messages.reduce((n, m) => n + m.content.length, 0) / 4);
+            this.usageMetrics.estimatedCompletionTokens += Math.ceil(content.length / 4);
+          }
         }
         return content;
       } catch (err) {

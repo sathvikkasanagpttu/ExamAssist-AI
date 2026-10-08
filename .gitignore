@@ -10,6 +10,8 @@ server/.env.*
 node_modules/
 server/node_modules/
 backend/node_modules/
+server/eval/cache/
+server/eval/results/
 
 # OS and Editor files
 .DS_Store
