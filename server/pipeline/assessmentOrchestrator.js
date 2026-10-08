@@ -81,6 +81,39 @@ export async function processAssessmentQuestion({
     difficulty: classification.difficulty
   });
 
+  // Do not spend retrieval or model calls to force an answer from an unclear
+  // prompt. The extension presents this disposition with its edit controls.
+  if (classification.questionQuality.status !== "clear") {
+    const quality = classification.questionQuality;
+    return {
+      question: classification.rawQuestion,
+      questionType: classification.questionType,
+      subject: classification.subject,
+      topic: classification.topic,
+      difficulty: classification.difficulty,
+      questionQuality: quality,
+      directAnswer: "UNVERIFIED",
+      questionRestated: `Clarify: ${classification.rawQuestion}`,
+      ownSolution: "The visible prompt needs revision before it can be answered safely.",
+      confidence: "UNVERIFIED",
+      confidenceReason: quality.reason,
+      explanation: `${quality.reason}${quality.missing ? ` Please provide: ${quality.missing}` : ""}`,
+      reasoningSteps: [],
+      optionAnalysis: [],
+      toolEvidence: [],
+      evidenceUsed: [],
+      evidenceAgreesWithSolution: false,
+      verification: {
+        status: "UNVERIFIED",
+        supported: [],
+        conflicting: [],
+        unsupported: [quality.reason]
+      },
+      sources: [],
+      retrievalTimestamp: new Date().toISOString()
+    };
+  }
+
   // 2-3. The f_agent experiment replaces static routing with a bounded native
   // function-calling loop. Any error deliberately falls through to the proven
   // solve-first pipeline below, preserving the existing product behavior.
@@ -198,6 +231,7 @@ export async function processAssessmentQuestion({
     subject: classification.subject,
     topic: classification.topic,
     difficulty: classification.difficulty,
+    questionQuality: classification.questionQuality,
     directAnswer: reasonedOutput.directAnswer,
     questionRestated: reasonedOutput.questionRestated,
     ownSolution: reasonedOutput.ownSolution,

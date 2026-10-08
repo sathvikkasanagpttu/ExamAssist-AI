@@ -109,6 +109,11 @@ Retrieves public extension configuration, allowable question types, and mode def
   "subject": "Biology",
   "topic": "Cell Biology",
   "difficulty": "Intermediate",
+  "questionQuality": {
+    "status": "clear",
+    "reason": "The visible question has enough information to analyze.",
+    "missing": ""
+  },
   "directAnswer": "Mitochondria",
   "confidence": "HIGH",
   "confidenceReason": "Multiple authoritative peer-reviewed and academic sources agree.",

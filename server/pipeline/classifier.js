@@ -4,6 +4,8 @@
  * subject, topic, difficulty, and whether web search is required.
  */
 
+import { assessQuestionQuality } from "./questionQuality.js";
+
 export function classifyQuestion(questionText, options = []) {
   const text = String(questionText || "").trim();
   const lower = text.toLowerCase();
@@ -183,6 +185,7 @@ export function classifyQuestion(questionText, options = []) {
     difficulty,
     webSearchNeeded,
     options: extractedOptions,
-    hasOptions: extractedOptions.length > 0
+    hasOptions: extractedOptions.length > 0,
+    questionQuality: assessQuestionQuality(text, extractedOptions, questionType)
   };
 }

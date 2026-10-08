@@ -123,6 +123,8 @@ Questions are classified across 10 distinct analytical types:
 | `CONCEPTUAL` | Definitions, theories, principles | Foundational explanation grounded in academic sources |
 | `SHORT_ANSWER` | Open-ended academic prompts | Concise, structured, evidence-supported synthesis |
 
+Before retrieval, the same classifier emits a visible quality disposition: `clear`, `ambiguous`, `missing_info`, `multiple_correct`, `contradictory_options`, or `truncated`. A non-clear disposition skips solving and returns `UNVERIFIED` with a one-line reason and the missing information needed to continue.
+
 ---
 
 ## 5. Multi-Angle Search & Evidence Ranking

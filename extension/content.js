@@ -445,6 +445,8 @@
     const confLevel = (data.confidence || "UNVERIFIED").toUpperCase();
     const confClass = `examai-conf-${confLevel.toLowerCase()}`;
     const modeClass = currentMode === "Authorized Assessment Mode" ? "examai-mode-authorized" : "examai-mode-practice";
+    const quality = data.questionQuality || { status: "clear", reason: "", missing: "" };
+    const needsQuestionEdit = quality.status && quality.status !== "clear";
 
     const directAnswerText = typeof data.directAnswer === "object" && data.directAnswer !== null
       ? `${data.directAnswer.option ? data.directAnswer.option + ". " : ""}${data.directAnswer.text || ""}`.trim()
@@ -531,6 +533,13 @@
       ? captured.options.length
       : (Array.isArray(data.options) ? data.options.length : (Array.isArray(data.optionAnalysis) ? data.optionAnalysis.length : 0));
 
+    const qualityWarningHtml = needsQuestionEdit ? `
+      <div class="examai-quality-warning" role="alert">
+        <strong>⚠️ Question needs revision: ${esc(String(quality.status).replace(/_/g, " "))}</strong>
+        <span>${esc(quality.reason || "The visible prompt cannot support a reliable answer.")}</span>
+        ${quality.missing ? `<span><strong>Please add:</strong> ${esc(quality.missing)}</span>` : ""}
+      </div>` : "";
+
     panel.innerHTML = `
       <div class="examai-head">
         <div class="examai-title-wrap">
@@ -556,6 +565,8 @@
         </div>
         <div class="examai-question">${esc(data.question || captured.question)}</div>
         <div style="font-size:11px;color:#94a3b8;margin:6px 0;">Sent to AI: ${safeOptionsCount} option(s) detected</div>
+
+        ${qualityWarningHtml}
 
         <div class="examai-direct-card">
           <div class="examai-direct-title">Direct Answer</div>
@@ -583,7 +594,7 @@
           ${sources || `<div style="font-size:12px;color:#94a3b8;">No web evidence retrieved or required for this question type.</div>`}
         </div>
 
-        <details class="examai-edit-box">
+        <details class="examai-edit-box" ${needsQuestionEdit ? "open" : ""}>
           <summary style="cursor:pointer;font-size:12px;color:#93c5fd;font-weight:600;">✏️ Edit question or options before re-analyzing</summary>
           <div style="margin-top:8px;">
             <label style="font-size:11px;color:#94a3b8;display:block;">Question Prompt:</label>
@@ -604,6 +615,9 @@
     makeDraggable(panel, panel.querySelector(".examai-head"));
     bindHeaderControls(panel, captured);
     bindEditBox(panel);
+    if (needsQuestionEdit) {
+      setTimeout(() => panel.querySelector("#examai-edit-q")?.focus(), 0);
+    }
 
     // Bind action buttons
     panel.querySelector("#examai-copy-ans").onclick = () => {

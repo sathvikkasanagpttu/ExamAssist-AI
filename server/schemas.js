@@ -38,6 +38,10 @@ export const VerificationStatusEnum = z.enum([
   "UNVERIFIED"
 ]);
 
+export const QuestionQualityStatusEnum = z.enum([
+  "clear", "ambiguous", "missing_info", "multiple_correct", "contradictory_options", "truncated"
+]);
+
 // Request Schemas
 export const AssessmentAnalyzeRequestSchema = z.object({
   question: z.string().optional(),
@@ -156,6 +160,11 @@ export const AssessmentResponseSchema = z.object({
   subject: z.string(),
   topic: z.string(),
   difficulty: DifficultyEnum,
+  questionQuality: z.object({
+    status: QuestionQualityStatusEnum,
+    reason: z.string(),
+    missing: z.string()
+  }).optional(),
   directAnswer: DirectAnswerSchema,
   questionRestated: z.string().optional(),
   ownSolution: z.string().optional(),
