@@ -41,6 +41,12 @@ export class AITimeoutError extends AIError {
   }
 }
 
+export class AIBudgetError extends AIError {
+  constructor(message = "The agent budget was exhausted before a verified result was available") {
+    super(message, "AI_BUDGET_EXCEEDED", 503);
+  }
+}
+
 /**
  * Extracts and parses a JSON object or array from LLM text output
  */
@@ -89,6 +95,7 @@ export class AIClient {
     this.model = options.model || process.env.OPENAI_MODEL || "gpt-4o";
     this.baseURL = options.baseURL || process.env.OPENAI_BASE_URL || undefined;
     this.mockHandler = options.mockHandler || null;
+    this.toolLoopHandler = options.toolLoopHandler || null;
     this.usageMetrics = options.usageMetrics || null;
 
     if (this.apiKey && this.apiKey !== "replace_me" && this.apiKey.trim().length > 0) {
@@ -104,7 +111,7 @@ export class AIClient {
   get isConfigured() {
     return Boolean(
       (this.apiKey && this.apiKey !== "replace_me" && this.apiKey.trim().length > 0) ||
-      this.mockHandler
+      this.mockHandler || this.toolLoopHandler
     );
   }
 
@@ -265,6 +272,129 @@ export class AIClient {
     }
 
     return null;
+  }
+
+  /**
+   * Executes native OpenAI-compatible function calls with hard call, time,
+   * token, and configured-cost limits. Tool output is returned to the model
+   * only as data and the caller is responsible for validating every argument.
+   */
+  async runToolLoop({
+    systemPrompt,
+    userPrompt,
+    tools,
+    executeTool,
+    maxToolCalls = 6,
+    maxToolMs = 5000,
+    maxTotalMs = 15000,
+    maxTokens = 6000,
+    maxUsd = Number(process.env.AGENT_MAX_USD || "0.05"),
+    costPer1kTokensUsd = Number(process.env.AGENT_COST_PER_1K_TOKENS_USD || "")
+  }) {
+    if (this.toolLoopHandler) {
+      return this.toolLoopHandler({ systemPrompt, userPrompt, tools, executeTool, maxToolCalls, maxToolMs, maxTotalMs, maxTokens, maxUsd, costPer1kTokensUsd });
+    }
+    // Text-completion mocks cannot emulate native tool-call messages. Let the
+    // caller use its deterministic fallback instead of opening a real network
+    // request with a test key.
+    if (this.mockHandler) throw new AIUnavailableError("Native tool calling is unavailable for this completion mock");
+    if (!this.isConfigured || !this.openai) throw new AIConfigError();
+    if (!Number.isFinite(costPer1kTokensUsd) || costPer1kTokensUsd <= 0) {
+      throw new AIBudgetError("AGENT_COST_PER_1K_TOKENS_USD is required to enforce the agent USD budget");
+    }
+
+    const messages = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt }
+    ];
+    const trace = [];
+    const startedAt = Date.now();
+    let totalTokens = 0;
+    let totalCostUsd = 0;
+
+    while (true) {
+      if (Date.now() - startedAt > maxTotalMs) throw new AIBudgetError("Agent exceeded its total time budget");
+      if (trace.length > maxToolCalls) throw new AIBudgetError("Agent exceeded its maximum number of tool calls");
+      if (totalTokens >= maxTokens) throw new AIBudgetError("Agent exceeded its token budget");
+      if (totalCostUsd >= maxUsd) throw new AIBudgetError("Agent exceeded its USD budget");
+
+      let response;
+      try {
+        response = await this.openai.chat.completions.create({
+          model: this.model,
+          messages,
+          tools,
+          tool_choice: "auto",
+          temperature: 0
+        }, { signal: AbortSignal.timeout(Math.max(250, maxTotalMs - (Date.now() - startedAt))) });
+      } catch (error) {
+        const message = String(error?.message || error);
+        const status = error?.status || error?.statusCode;
+        if (status === 401 || status === 403 || /invalid api key|incorrect api key/i.test(message)) throw new AIConfigError(`Invalid API key: ${message}`);
+        if (status === 429 || /rate limit|quota|429/i.test(message)) throw new AIRateLimitError(message);
+        if (/abort|timeout|timedout/i.test(message)) throw new AITimeoutError(message);
+        throw new AIUnavailableError(message);
+      }
+
+      const message = response.choices?.[0]?.message;
+      if (!message) throw new AIUnavailableError("Agent provider returned no message");
+      const usage = response.usage?.total_tokens;
+      const estimated = usage ?? Math.ceil(JSON.stringify(messages).length / 4 + String(message.content || "").length / 4);
+      totalTokens += estimated;
+      totalCostUsd += (estimated / 1000) * costPer1kTokensUsd;
+      if (totalTokens > maxTokens) throw new AIBudgetError("Agent exceeded its token budget");
+      if (totalCostUsd > maxUsd) throw new AIBudgetError("Agent exceeded its USD budget");
+      if (this.usageMetrics) {
+        this.usageMetrics.calls++;
+        if (usage != null) this.usageMetrics.providerTokens += usage;
+        else {
+          this.usageMetrics.estimatedPromptTokens += Math.ceil(JSON.stringify(messages).length / 4);
+          this.usageMetrics.estimatedCompletionTokens += Math.ceil(String(message.content || "").length / 4);
+        }
+      }
+
+      const toolCalls = message.tool_calls || [];
+      if (toolCalls.length === 0) {
+        const final = extractJsonFromText(message.content);
+        if (!final || typeof final !== "object") throw new AIUnavailableError("Agent did not return a JSON final response");
+        return {
+          final,
+          trace,
+          usage: { totalTokens, totalCostUsd: Math.round(totalCostUsd * 1e6) / 1e6, elapsedMs: Date.now() - startedAt }
+        };
+      }
+
+      if (trace.length + toolCalls.length > maxToolCalls) throw new AIBudgetError("Agent exceeded its maximum number of tool calls");
+
+      messages.push({ role: "assistant", content: message.content || "", tool_calls: toolCalls });
+      for (const toolCall of toolCalls) {
+        let args;
+        try { args = JSON.parse(toolCall.function?.arguments || "{}"); }
+        catch { args = null; }
+        const name = toolCall.function?.name || "unknown";
+        let result;
+        try {
+          if (args === null) {
+            result = { ok: false, error: "Tool arguments were not valid JSON" };
+          } else {
+            let timeoutId;
+            try {
+              result = await new Promise((resolve, reject) => {
+                timeoutId = setTimeout(() => reject(new AITimeoutError(`Tool '${name}' exceeded its time budget`)), maxToolMs);
+                Promise.resolve(executeTool(name, args)).then(resolve, reject);
+              });
+            } finally {
+              clearTimeout(timeoutId);
+            }
+          }
+        } catch (error) {
+          result = { ok: false, error: "Tool execution failed", code: error?.code || "TOOL_ERROR" };
+        }
+        const safeResult = JSON.stringify(result).slice(0, 16000);
+        trace.push({ toolCallId: toolCall.id, tool: name, args, result: safeResult, elapsedMs: Date.now() - startedAt });
+        messages.push({ role: "tool", tool_call_id: toolCall.id, content: safeResult });
+      }
+    }
   }
 }
 

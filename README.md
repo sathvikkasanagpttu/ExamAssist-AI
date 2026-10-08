@@ -2,7 +2,7 @@
 
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-green.svg)](https://nodejs.org/)
 [![Chrome Extension](https://img.shields.io/badge/Chrome%20Extension-Manifest%20V3-blue.svg)](https://developer.chrome.com/docs/extensions/mv3/)
-[![Evaluation set](https://img.shields.io/badge/Evaluation%20set-155%20practice%20questions-brightgreen.svg)](server/eval/dataset.jsonl)
+[![Evaluation set](https://img.shields.io/badge/Evaluation%20set-236%20practice%20questions-brightgreen.svg)](server/eval/dataset.jsonl)
 
 ExamAssist AI is a Chrome Manifest V3 study copilot with an Express backend. It helps students work through practice questions, problem sets, textbook review, and assessments where AI assistance has been explicitly authorized. Every interaction is visible and user-triggered; the extension never selects or submits answers.
 
@@ -15,7 +15,8 @@ The system is designed to make uncertainty visible. It returns typed errors when
 - **Option integrity checks.** Answer letters and text must match the options that were actually supplied. The system does not fall back to a guessed choice.
 - **Specialized solvers.** Numerical questions use deterministic math evaluation and optional symbolic operations. Coding and debugging problems can run in an isolated Docker service; SQL is evaluated only as a single read query against a fresh in-memory SQLite database. The UI shows tool output only when a tool actually completed.
 - **Private Course Notes RAG.** A user can upload PDF, DOCX, Markdown, or text notes. Documents, chunks, and embeddings are scoped to that browser profile and can be deleted from the extension options page.
-- **Evaluation and ablations.** A 155-question labeled practice set covers multiple subjects, formats, and difficulty levels. Configurations measure the contribution of solve-first reasoning, retrieval, tie-breaks, RAG, and specialized solvers.
+- **Evaluation and ablations.** A 236-question labeled practice set covers multiple subjects, formats, and difficulty levels. Configurations measure solve-first reasoning, retrieval, tie-breaks, RAG, specialized solvers, and a bounded native tool-calling agent.
+- **Bounded native tools.** The optional agent can use web search, private Course Notes, calculation, code execution, and read-only SQL. Every call has strict arguments and bounded call, time, token, and configured-cost limits; failures return to the existing static pipeline.
 
 ## Architecture
 
@@ -123,13 +124,14 @@ Tool status is returned in `toolEvidence`. A **Verified by** badge in the extens
 
 ## Evaluation harness
 
-The labeled practice dataset is at [server/eval/dataset.jsonl](server/eval/dataset.jsonl). It contains 155 items across STEM, humanities, computing, aptitude, and multiple question formats. Four rows remain marked `needsReview`; see [server/eval/REVIEW.md](server/eval/REVIEW.md) before using full-set accuracy as a final quality claim.
+The labeled practice dataset is at [server/eval/dataset.jsonl](server/eval/dataset.jsonl). It contains 236 reviewed items across STEM, humanities, computing, aptitude, and multiple question formats, with at least 20 examples each of coding, SQL, numerical, true/false, and multi-select questions. [server/eval/redteam.jsonl](server/eval/redteam.jsonl) contains 40 adverse cases that must be flagged or left `UNVERIFIED`.
 
 Run an ablation or a deterministic plumbing check from `server/`:
 
 ```bash
 npm run eval -- --config c_solve_tiebreak --limit 25
 npm run eval:smoke
+npm run eval:gate
 ```
 
 Configurations live in `server/eval/configs/`:
@@ -141,8 +143,11 @@ Configurations live in `server/eval/configs/`:
 | `c_solve_tiebreak` | Solve-first reasoning, retrieval, and disagreement tie-break |
 | `d_rag` | Full reasoning plus Course Notes retrieval |
 | `e_specialized` | Full pipeline plus deterministic math, code, SQL, and MCQ tools |
+| `f_agent` | Native tool-calling loop with web, Course Notes, calculator, code, and SQL tools; static fallback on an agent error |
 
-Each live run writes JSON and Markdown reports to `server/eval/results/`, and caches per-question results under `server/eval/cache/`. Reports include breakdowns by subject, question type, and difficulty; confidence calibration; `UNVERIFIED` rate; latency percentiles; and token/cost data when the provider reports it or a local rate is configured. `EVAL_MAX_CALLS` limits provider calls, `EVAL_CONCURRENCY` controls parallelism, and `EVAL_COST_PER_1K_TOKENS_USD` enables an estimated cost field. Smoke mode uses a mock AI and verifies wiring only; it is not representative of live accuracy.
+Each live run writes JSON and Markdown reports to `server/eval/results/`, and caches per-question results under `server/eval/cache/`. Reports include breakdowns by subject, question type, difficulty, and shuffled answer position; confidence calibration; `UNVERIFIED` rate; red-team flag accuracy; retrieval and citation measures where gold data is available; latency percentiles; and token/cost data when the provider reports it or a local rate is configured. `npm run eval:gate` checks the smoke baseline for configured accuracy, calibration, and unsafe-answer regressions. `EVAL_MAX_CALLS` limits provider calls, `EVAL_CONCURRENCY` controls parallelism, and `EVAL_COST_PER_1K_TOKENS_USD` enables an estimated cost field. Smoke mode uses a mock AI and verifies wiring only; it is not representative of live accuracy.
+
+`f_agent` uses `AGENT_MAX_USD` (default `0.05`) and requires `AGENT_COST_PER_1K_TOKENS_USD` so it can enforce a real cost ceiling. If the cost is not configured or an agent/tool budget is exhausted, the request follows the static solve-first pipeline instead.
 
 To evaluate fixture notes with the RAG configuration, set `EVAL_LOCAL_USER_ID` to the browser profile ID that owns the fixture documents. The runner will retrieve only that profile's notes.
 

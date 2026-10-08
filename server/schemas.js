@@ -81,6 +81,35 @@ export const AnswerGenerateRequestSchema = z.object({
   sources: z.array(z.any()).default([])
 });
 
+// Native tool-calling schemas. These are deliberately narrow because model
+// tool arguments are untrusted input at the API boundary.
+export const WebSearchToolArgsSchema = z.object({
+  query: z.string().trim().min(3).max(500),
+  maxResults: z.number().int().min(1).max(5).optional().default(5)
+}).strict();
+
+export const KnowledgeBaseSearchToolArgsSchema = z.object({
+  query: z.string().trim().min(3).max(500)
+}).strict();
+
+export const CalculatorToolArgsSchema = z.object({
+  expression: z.string().trim().min(1).max(1000),
+  operation: z.enum(["evaluate", "simplify", "differentiate", "integrate"]).optional().default("evaluate"),
+  variable: z.string().trim().regex(/^[A-Za-z][A-Za-z0-9_]{0,31}$/).optional().default("x")
+}).strict();
+
+export const RunCodeToolArgsSchema = z.object({
+  language: z.enum(["python", "javascript", "c", "cpp", "java"]),
+  code: z.string().min(1).max(64000),
+  stdin: z.string().max(12000).optional().default(""),
+  timeoutSeconds: z.number().min(0.1).max(3).optional().default(2)
+}).strict();
+
+export const RunSqlToolArgsSchema = z.object({
+  schema: z.string().max(64000).optional().default(""),
+  query: z.string().trim().min(1).max(64000)
+}).strict();
+
 // Response Schemas
 export const SourceItemSchema = z.object({
   type: z.enum(["web", "course_notes"]),
@@ -111,6 +140,15 @@ export const OptionAnalysisItemSchema = z.object({
   reason: z.string().optional(),
   analysis: z.string().optional()
 });
+
+export const AgentFinalResponseSchema = z.object({
+  directAnswer: z.union([z.string(), z.object({ option: z.string().optional(), text: z.string().optional() })]),
+  explanation: z.string().min(1).max(12000),
+  reasoningSteps: z.array(z.string().max(2000)).max(12).optional().default([]),
+  confidence: ConfidenceEnum.optional().default("UNVERIFIED"),
+  confidenceReason: z.string().max(2000).optional().default("Agent result requires verification."),
+  optionAnalysis: z.array(OptionAnalysisItemSchema).max(10).optional().default([])
+}).strict();
 
 export const AssessmentResponseSchema = z.object({
   question: z.string(),

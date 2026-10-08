@@ -1,0 +1,15 @@
+{
+  "name": "f_agent",
+  "description": "Bounded native tool-calling agent with static solve-first fallback.",
+  "skipSearch": false,
+  "skipTieBreak": false,
+  "ragEnabled": true,
+  "specializedSolvers": false,
+  "toolCallingAgent": true,
+  "agentBudget": {
+    "maxToolCalls": 6,
+    "maxToolMs": 5000,
+    "maxTotalMs": 15000,
+    "maxTokens": 6000
+  }
+}

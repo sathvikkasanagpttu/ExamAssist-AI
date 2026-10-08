@@ -156,7 +156,30 @@ Every claim in the answer draft undergoes independent claim verification:
 
 ---
 
-## 7. Extension UI Architecture
+## 7. Optional Native Tool-Calling Agent
+
+The `f_agent` evaluation configuration can replace the static routing step with an OpenAI-compatible native function-call loop. It receives only the visible question, visible options, and classification. The loop never receives evaluation answer keys, browser state, or hidden page content.
+
+```mermaid
+flowchart LR
+    Q[Visible question and options] --> A[Bounded agent]
+    A --> W[web_search]
+    A --> K[kb_search]
+    A --> M[calculator]
+    A --> C[run_code sandbox]
+    A --> S[run_sql sandbox]
+    W --> V[Verification and confidence]
+    K --> V
+    M --> V
+    C --> V
+    S --> V
+```
+
+Tool arguments are strict Zod schemas. The loop allows at most six calls and has per-tool, total-time, token, and configured-cost limits. Retrieved content and tool output are treated as untrusted data. A malformed call, exhausted budget, unavailable provider, or failed tool falls back to the static classifier → retrieval → solve-first → verification pipeline. Code and SQL retain the isolated sandbox limits.
+
+---
+
+## 8. Extension UI Architecture
 
 - **Floating Overlay**: Non-intrusive container injected into the host DOM with Shadow DOM or isolated namespace styling.
 - **Draggable & Resizable**: Drag handle on header; resize handle on bottom-right corner.

@@ -37,6 +37,8 @@ services:
       - CORS_ALLOWED_ORIGINS=http://localhost:8787,chrome-extension://*
       - SANDBOX_URL=http://examassist-sandbox:8790
       - SANDBOX_TIMEOUT_MS=${SANDBOX_TIMEOUT_MS:-2000}
+      - AGENT_MAX_USD=${AGENT_MAX_USD:-0.05}
+      - AGENT_COST_PER_1K_TOKENS_USD=${AGENT_COST_PER_1K_TOKENS_USD:-}
       # Pass through optional API keys from local .env if provided
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}

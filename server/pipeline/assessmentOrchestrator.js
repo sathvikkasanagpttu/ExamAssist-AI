@@ -16,6 +16,7 @@ import { computeConfidence } from "./confidenceEngine.js";
 import { defaultAIClient } from "../aiClient.js";
 import { logger } from "../logger.js";
 import { ragEnabled, searchKnowledgeBase } from "../kb/knowledgeBase.js";
+import { runToolCallingAgent } from "./toolCallingAgent.js";
 
 const CONFIDENCE_RANKS = {
   UNVERIFIED: 0,
@@ -80,46 +81,75 @@ export async function processAssessmentQuestion({
     difficulty: classification.difficulty
   });
 
-  // 2. Multi-Angle Search Orchestration (Priority 3: relevance-first, skipped for pure math/code)
-  let sources = [];
-  if (classification.webSearchNeeded && !evaluationConfig?.skipSearch) {
-    const queries = await generateSearchQueries(classification.rawQuestion, classification.subject, aiClient);
-    sources = await orchestrateSearch(queries, maxSources, classification.rawQuestion, classification.questionType);
-  }
-
-  let courseNotes = [];
-  if (ragEnabled() && userId && evaluationConfig?.ragEnabled !== false) {
+  // 2-3. The f_agent experiment replaces static routing with a bounded native
+  // function-calling loop. Any error deliberately falls through to the proven
+  // solve-first pipeline below, preserving the existing product behavior.
+  let allSources = [];
+  let reasonedOutput = null;
+  let agentTrace = null;
+  if (evaluationConfig?.toolCallingAgent) {
     try {
-      const retrieval = await searchKnowledgeBase({ userId, question: classification.rawQuestion });
-      courseNotes = retrieval.matches.map((match) => ({
-        type: "course_notes",
-        title: match.file,
-        domain: "Course Notes",
-        file: match.file,
-        page: match.page,
-        snippet: match.snippet,
-        section: match.section
-      }));
+      const agent = await runToolCallingAgent({
+        question: classification.rawQuestion,
+        classification,
+        options: classification.options,
+        userId,
+        aiClient,
+        budget: evaluationConfig.agentBudget
+      });
+      allSources = agent.sources;
+      agentTrace = agent.agentTrace;
+      reasonedOutput = {
+        ...agent,
+        questionRestated: `Determine: ${classification.rawQuestion}`,
+        ownSolution: agent.explanation,
+        evidenceUsed: [],
+        evidenceAgreesWithSolution: true
+      };
     } catch (error) {
-      logger.warn("Course Notes retrieval unavailable", { code: error.code || "KB_RETRIEVAL_FAILED" });
+      logger.warn("Tool-calling agent unavailable; using static pipeline", { code: error.code || "AGENT_FALLBACK" });
     }
   }
-  const allSources = [...sources, ...courseNotes];
 
-  // 3. Specialized Reasoning (Solve before search, mathjs/sandbox, option integrity)
-  const reasonedOutput = await generateReasonedAnswer({
-    question: classification.rawQuestion,
-    questionType: classification.questionType,
-    subject: classification.subject,
-    topic: classification.topic,
-    options: classification.options,
-    sources: allSources,
-    codeSnippet,
-    mathFormula,
-    aiClient,
-    skipTieBreak: Boolean(evaluationConfig?.skipTieBreak),
-    specializedSolvers: evaluationConfig ? Boolean(evaluationConfig.specializedSolvers) : true
-  });
+  if (!reasonedOutput) {
+    let sources = [];
+    if (classification.webSearchNeeded && !evaluationConfig?.skipSearch) {
+      const queries = await generateSearchQueries(classification.rawQuestion, classification.subject, aiClient);
+      sources = await orchestrateSearch(queries, maxSources, classification.rawQuestion, classification.questionType);
+    }
+
+    let courseNotes = [];
+    if (ragEnabled() && userId && evaluationConfig?.ragEnabled !== false) {
+      try {
+        const retrieval = await searchKnowledgeBase({ userId, question: classification.rawQuestion });
+        courseNotes = retrieval.matches.map((match) => ({
+          type: "course_notes",
+          title: match.file,
+          domain: "Course Notes",
+          file: match.file,
+          page: match.page,
+          snippet: match.snippet,
+          section: match.section
+        }));
+      } catch (error) {
+        logger.warn("Course Notes retrieval unavailable", { code: error.code || "KB_RETRIEVAL_FAILED" });
+      }
+    }
+    allSources = [...sources, ...courseNotes];
+    reasonedOutput = await generateReasonedAnswer({
+      question: classification.rawQuestion,
+      questionType: classification.questionType,
+      subject: classification.subject,
+      topic: classification.topic,
+      options: classification.options,
+      sources: allSources,
+      codeSnippet,
+      mathFormula,
+      aiClient,
+      skipTieBreak: Boolean(evaluationConfig?.skipTieBreak),
+      specializedSolvers: evaluationConfig ? Boolean(evaluationConfig.specializedSolvers) : true
+    });
+  }
 
   // 4. Verification Pass & Contradiction Detection
   const verification = await runVerificationPass({
@@ -177,6 +207,7 @@ export async function processAssessmentQuestion({
     reasoningSteps: reasonedOutput.reasoningSteps,
     optionAnalysis: reasonedOutput.optionAnalysis,
     toolEvidence: reasonedOutput.toolEvidence || [],
+    ...(agentTrace ? { agentTrace } : {}),
     evidenceUsed: reasonedOutput.evidenceUsed || [],
     evidenceAgreesWithSolution: reasonedOutput.evidenceAgreesWithSolution !== undefined ? reasonedOutput.evidenceAgreesWithSolution : true,
     verification: {
