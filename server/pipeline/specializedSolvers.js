@@ -53,13 +53,18 @@ export async function runSpecializedSolver({ question, questionType, options = [
     if (!executed) toolFailure = true;
     else {
       const computed = typeof result.result === "number" ? result.result : String(result.result);
-      const llmValue = numericAnswer(answerText(llmResult?.directAnswer) || llmResult?.ownSolution);
+      const llmAnswer = answerText(llmResult?.directAnswer) || llmResult?.ownSolution || "";
+      const llmValue = numericAnswer(llmAnswer);
       const toolValue = numericAnswer(computed);
-      const mismatch = typeof computed === "number" && llmValue !== null && Math.abs(llmValue - computed) > Math.max(1e-8, Math.abs(computed) * 1e-8);
+      const places = Number.isInteger(extraction.decimalPlaces) ? Math.min(10, Math.max(0, extraction.decimalPlaces)) : null;
+      const expectedRounded = typeof computed === "number" && places !== null ? Number(computed.toFixed(places)) : computed;
+      const numberMismatch = typeof computed === "number" && llmValue !== null && Math.abs(llmValue - expectedRounded) > Math.max(5e-7, Math.abs(expectedRounded) * 1e-8);
+      const unit = String(extraction.unit || "").trim();
+      const unitMismatch = Boolean(unit && !llmAnswer.toLowerCase().includes(unit.toLowerCase()));
+      const symbolicMismatch = typeof computed === "string" && llmAnswer && computed.replace(/[\s*]/g, "").toLowerCase() !== llmAnswer.replace(/[\s*]/g, "").toLowerCase();
+      const mismatch = numberMismatch || unitMismatch || symbolicMismatch;
       if (mismatch) {
-        const unit = String(extraction.unit || "").trim();
-        const places = Number.isInteger(extraction.decimalPlaces) ? Math.min(10, Math.max(0, extraction.decimalPlaces)) : null;
-        const text = `${places === null ? computed : computed.toFixed(places)}${unit ? ` ${unit}` : ""}`;
+        const text = `${typeof computed === "number" && places !== null ? computed.toFixed(places) : computed}${unit ? ` ${unit}` : ""}`;
         const matchingOption = options.find((option) => {
           const body = typeof option === "string" ? option : option.text || "";
           const value = numericAnswer(body);

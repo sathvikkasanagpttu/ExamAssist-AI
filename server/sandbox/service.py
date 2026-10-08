@@ -30,6 +30,19 @@ def _limits():
     resource.setrlimit(resource.RLIMIT_NPROC, (24, 24))
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
 
+def _restore_workspace_owner(workspace):
+    os.chown(workspace, 0, 0)
+    os.chmod(workspace, 0o700)
+    def restore(path):
+        with os.scandir(path) as entries:
+            for entry in entries:
+                entry_path = Path(entry.path)
+                os.chown(entry_path, 0, 0, follow_symlinks=False)
+                if entry.is_dir(follow_symlinks=False):
+                    os.chmod(entry_path, 0o700)
+                    restore(entry_path)
+    restore(workspace)
+
 def execute(payload):
     language = str(payload.get("language", "")).lower()
     code = payload.get("code")
@@ -37,22 +50,25 @@ def execute(payload):
         return {"executed": False, "error": "Unsupported language or invalid code"}, 400
     filename, command = LANGUAGES[language]
     with tempfile.TemporaryDirectory(prefix="examassist-") as directory:
-        Path(directory, filename).write_text(code, encoding="utf-8")
-        os.chown(directory, 10002, 10002)
-        os.chown(Path(directory, filename), 10002, 10002)
-        disabled_bwrap = Path(directory, ".bwrap-disabled")
+        workspace = Path(directory, "workspace")
+        workspace.mkdir(mode=0o700)
+        (workspace / filename).write_text(code, encoding="utf-8")
+        os.chown(workspace, 10002, 10002)
+        os.chown(workspace / filename, 10002, 10002)
+        disabled_bwrap = workspace / ".bwrap-disabled"
         disabled_bwrap.write_text("Sandbox helper is not available inside user code.\n", encoding="utf-8")
+        os.chown(disabled_bwrap, 10002, 10002)
         try:
             if not shutil.which("bwrap"):
                 return {"executed": False, "error": "Network-isolated sandbox unavailable"}, 503
             isolated_command = ["bwrap", "--die-with-parent", "--unshare-net", "--ro-bind", "/", "/",
                                 "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp",
-                                "--bind", directory, directory, "--chdir", directory,
+                                "--bind", str(workspace), str(workspace), "--chdir", str(workspace),
                                 "--ro-bind", str(disabled_bwrap), "/usr/bin/bwrap",
                                 "--uid", "10002", "--gid", "10002", "--", *command]
             with open(Path(directory, ".stdout"), "w+b") as stdout_file, open(Path(directory, ".stderr"), "w+b") as stderr_file:
                 proc = subprocess.Popen(isolated_command, cwd=directory, stdin=subprocess.PIPE, stdout=stdout_file,
-                                        stderr=stderr_file, text=True, env={"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": directory, "LANG": "C.UTF-8"},
+                                        stderr=stderr_file, text=True, env={"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": str(workspace), "LANG": "C.UTF-8"},
                                         preexec_fn=_limits, close_fds=True, start_new_session=True)
                 try:
                     proc.communicate(input=str(payload.get("stdin", "")), timeout=min(max(float(payload.get("timeoutSeconds", 2)), .1), TIMEOUT_SECONDS))
@@ -78,6 +94,8 @@ def execute(payload):
                     "exitCode": None, "error": "Execution timed out"}, 200
         except (OSError, ValueError) as error:
             return {"executed": False, "error": "Execution service unavailable"}, 503
+        finally:
+            _restore_workspace_owner(workspace)
 
 def execute_sql(payload):
     schema = payload.get("schema", "")
