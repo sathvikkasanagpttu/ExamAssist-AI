@@ -1,5 +1,6 @@
 /**
  * ExamAssist AI - Request and Response Validation Schemas (Zod)
+ * Shared across server and extension (@examassist/shared).
  */
 
 import { z } from "zod";
@@ -12,9 +13,23 @@ export const QuestionTypeEnum = z.enum([
   "NUMERICAL",
   "CODING",
   "DEBUGGING",
+  "OUTPUT_PREDICTION",
+  "CODE_MCQ",
+  "COMPLEXITY",
+  "FILL_IN_CODE",
   "SQL",
   "CONCEPTUAL",
   "SHORT_ANSWER"
+]);
+
+export const CodingQuestionSubTypeEnum = z.enum([
+  "coding_problem",
+  "debug_my_code",
+  "predict_the_output",
+  "code_mcq",
+  "sql_query",
+  "complexity_question",
+  "fill_in_the_code"
 ]);
 
 export const DifficultyEnum = z.enum([
@@ -42,6 +57,54 @@ export const QuestionQualityStatusEnum = z.enum([
   "clear", "ambiguous", "missing_info", "multiple_correct", "contradictory_options", "truncated"
 ]);
 
+export const ExplanationLevelEnum = z.enum([
+  "Simple",
+  "Technical",
+  "Interview"
+]);
+
+export const SupportedCodeLanguageEnum = z.enum([
+  "python",
+  "javascript",
+  "c",
+  "cpp",
+  "java",
+  "go",
+  "rust",
+  "sql"
+]);
+
+export const SampleTestCaseSchema = z.object({
+  stdin: z.string().default(""),
+  expectedOutput: z.string().default(""),
+  explanation: z.string().optional().default("")
+});
+
+export const ExtractedEditorStateSchema = z.object({
+  adapter: z.enum(["MonacoAdapter", "CodeMirror6Adapter", "CodeMirror5Adapter", "AceAdapter", "TextareaAdapter", "PreCodeAdapter", "none"]).default("none"),
+  code: z.string().default(""),
+  language: z.string().default(""),
+  selectedText: z.string().default(""),
+  cursorLine: z.number().int().nonnegative().nullable().default(null),
+  consoleOutput: z.string().default("")
+});
+
+export const ExtractedCodingProblemSchema = z.object({
+  platform: z.enum(["Generic", "HackerRank", "LeetCode", "GeeksforGeeks", "Moodle", "Canvas", "CustomPortal"]).default("Generic"),
+  questionSubType: CodingQuestionSubTypeEnum.default("coding_problem"),
+  title: z.string().default(""),
+  statement: z.string().default(""),
+  constraints: z.string().default(""),
+  inputFormat: z.string().default(""),
+  outputFormat: z.string().default(""),
+  sampleTests: z.array(SampleTestCaseSchema).default([]),
+  starterCode: z.string().default(""),
+  language: z.string().default("python"),
+  failingOutput: z.string().default(""),
+  options: z.array(z.string()).default([]),
+  editor: ExtractedEditorStateSchema.optional()
+});
+
 // Request Schemas
 export const AssessmentAnalyzeRequestSchema = z.object({
   question: z.string().optional(),
@@ -55,6 +118,56 @@ export const AssessmentAnalyzeRequestSchema = z.object({
   mathFormula: z.string().optional(),
   maxSources: z.number().int().min(1).max(10).optional().default(5),
   mode: z.enum(["Practice Mode", "Authorized Assessment Mode"]).optional().default("Practice Mode")
+});
+
+export const CodeAnalyzeRequestSchema = z.object({
+  question: z.string().min(3).max(50000),
+  title: z.string().max(500).optional().default(""),
+  questionSubType: CodingQuestionSubTypeEnum.optional(),
+  language: z.string().max(40).optional().default("python"),
+  starterCode: z.string().max(64000).optional().default(""),
+  userCode: z.string().max(64000).optional().default(""),
+  constraints: z.string().max(10000).optional().default(""),
+  inputFormat: z.string().max(5000).optional().default(""),
+  outputFormat: z.string().max(5000).optional().default(""),
+  sampleTests: z.array(SampleTestCaseSchema).max(20).optional().default([]),
+  failingOutput: z.string().max(16000).optional().default(""),
+  options: z.array(z.string()).max(12).optional().default([]),
+  sqlSchema: z.string().max(64000).optional().default(""),
+  dialect: z.enum(["SQLite", "PostgreSQL", "MySQL"]).optional().default("SQLite"),
+  explanationLevel: ExplanationLevelEnum.optional().default("Technical"),
+  mode: z.enum(["Practice Mode", "Authorized Assessment Mode"]).optional().default("Practice Mode")
+});
+
+export const CodeDebugRequestSchema = z.object({
+  question: z.string().min(3).max(50000),
+  language: z.string().max(40).optional().default("python"),
+  userCode: z.string().min(1).max(64000),
+  failingOutput: z.string().max(16000).optional().default(""),
+  sampleTests: z.array(SampleTestCaseSchema).max(20).optional().default([]),
+  explanationLevel: ExplanationLevelEnum.optional().default("Technical")
+});
+
+export const CodeHintRequestSchema = z.object({
+  question: z.string().min(3).max(50000),
+  language: z.string().max(40).optional().default("python"),
+  userCode: z.string().max(64000).optional().default(""),
+  level: z.number().int().min(1).max(4).optional().default(1),
+  explanationLevel: ExplanationLevelEnum.optional().default("Technical")
+});
+
+export const CodeExplainRequestSchema = z.object({
+  question: z.string().min(3).max(50000),
+  code: z.string().min(1).max(64000),
+  language: z.string().max(40).optional().default("python"),
+  explanationLevel: ExplanationLevelEnum.optional().default("Technical")
+});
+
+export const CodeComplexityRequestSchema = z.object({
+  code: z.string().min(1).max(64000),
+  language: z.string().max(40).optional().default("python"),
+  question: z.string().max(25000).optional().default(""),
+  measureEmpirical: z.boolean().optional().default(true)
 });
 
 export const QuestionClassifyRequestSchema = z.object({

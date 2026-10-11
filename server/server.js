@@ -6,7 +6,12 @@ import {
   QuestionClassifyRequestSchema,
   SearchRequestSchema,
   EvidenceVerifyRequestSchema,
-  AnswerGenerateRequestSchema
+  AnswerGenerateRequestSchema,
+  CodeAnalyzeRequestSchema,
+  CodeDebugRequestSchema,
+  CodeHintRequestSchema,
+  CodeExplainRequestSchema,
+  CodeComplexityRequestSchema
 } from "./schemas.js";
 import { createRateLimiter } from "./rateLimiter.js";
 import { logger } from "./logger.js";
@@ -18,6 +23,22 @@ import { runVerificationPass } from "./pipeline/verificationPass.js";
 import { defaultAIClient, AIError, AIConfigError } from "./aiClient.js";
 import { getActiveSearchProvider } from "./pipeline/search.js";
 import { sandboxHealth } from "./pipeline/sandboxClient.js";
+import {
+  analyzeCodingProblem,
+  debugUserCode,
+  generateCodingHint,
+  estimateComplexity,
+  runStaticCodeAnalysis
+} from "./pipeline/codingEngine.js";
+import {
+  scrubSecretsAndPII,
+  startSpan,
+  getRecentSpans,
+  isSemanticCacheEnabled,
+  computeProblemCacheKey,
+  getVerifiedCachedResult,
+  setVerifiedCachedResult
+} from "./pipeline/observabilityAndSafety.js";
 import multer from "multer";
 import {
   deleteDocument,
@@ -436,6 +457,214 @@ app.post("/api/analyze", (req, res) => {
     isMCQ: result.questionType === "MCQ" || result.questionType === "MULTI_SELECT",
     isMath: result.questionType === "NUMERICAL",
     isCoding: result.questionType === "CODING" || result.questionType === "DEBUGGING" || result.questionType === "SQL"
+  });
+});
+
+// --- PHASE 2 & 4: CODING ENGINE & OBSERVABILITY ENDPOINTS ---
+
+/**
+ * POST /api/code/analyze - Full Coding Engine Pipeline
+ */
+app.post("/api/code/analyze", async (req, res) => {
+  const span = startSpan("code.analyze", { language: req.body?.language });
+  try {
+    const parseResult = CodeAnalyzeRequestSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      span.end("validation_error");
+      return res.status(400).json({ error: "Validation Error", details: formatZodErrors(parseResult.error) });
+    }
+    const payload = parseResult.data;
+    const scrubbedQuestion = scrubSecretsAndPII(payload.question).text;
+    const scrubbedUserCode = scrubSecretsAndPII(payload.userCode).text;
+    const cacheKey = computeProblemCacheKey({
+      userId: localUserId(req) || "anon",
+      question: scrubbedQuestion,
+      constraints: payload.constraints,
+      language: payload.language,
+      sampleTests: payload.sampleTests
+    });
+
+    const cached = getVerifiedCachedResult(cacheKey);
+    if (cached) {
+      span.end("cache_hit");
+      return res.json({ ...cached, fromSemanticCache: true });
+    }
+
+    const result = await analyzeCodingProblem({
+      ...payload,
+      question: scrubbedQuestion,
+      userCode: scrubbedUserCode
+    });
+    setVerifiedCachedResult(cacheKey, result);
+    span.end("ok", { confidence: result.confidence });
+    res.json(result);
+  } catch (err) {
+    span.end("error", { code: err.code });
+    if (err instanceof AIError || (err.code && err.code.startsWith("AI_"))) {
+      return res.status(err.status || 503).json({ error: err.message, code: err.code });
+    }
+    res.status(500).json({ error: "Code analysis failed", message: err.message });
+  }
+});
+
+/**
+ * POST /api/code/analyze/stream - SSE Streaming Coding Engine Pipeline
+ */
+app.post("/api/code/analyze/stream", async (req, res) => {
+  let cancelled = false;
+  const send = (event, data = {}) => {
+    if (!cancelled && !res.writableEnded) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+  const cancel = () => { cancelled = true; };
+  req.once("aborted", cancel);
+  res.once("close", cancel);
+
+  try {
+    const parseResult = CodeAnalyzeRequestSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      send("error", { code: "VALIDATION_ERROR", message: "Validation Error", details: formatZodErrors(parseResult.error) });
+      return res.end();
+    }
+    const payload = parseResult.data;
+    const response = await analyzeCodingProblem({
+      ...payload,
+      question: scrubSecretsAndPII(payload.question).text,
+      userCode: scrubSecretsAndPII(payload.userCode).text,
+      onProgress: async (event, data) => {
+        if (cancelled) throw new Error("Client cancelled code analysis");
+        send(event, data);
+      }
+    });
+    send("done", { response });
+  } catch (err) {
+    if (!cancelled) send("error", { code: err.code || "CODE_ENGINE_ERROR", message: err.message });
+  } finally {
+    if (!res.writableEnded) res.end();
+  }
+});
+
+/**
+ * POST /api/code/debug - Pinpoint bug in user code + minimal read-only diff
+ */
+app.post("/api/code/debug", async (req, res) => {
+  const span = startSpan("code.debug", { language: req.body?.language });
+  try {
+    const parseResult = CodeDebugRequestSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      span.end("validation_error");
+      return res.status(400).json({ error: "Validation Error", details: formatZodErrors(parseResult.error) });
+    }
+    const payload = parseResult.data;
+    const result = await debugUserCode({
+      ...payload,
+      question: scrubSecretsAndPII(payload.question).text,
+      userCode: scrubSecretsAndPII(payload.userCode).text
+    });
+    span.end("ok");
+    res.json(result);
+  } catch (err) {
+    span.end("error");
+    if (err instanceof AIError || (err.code && err.code.startsWith("AI_"))) {
+      return res.status(err.status || 503).json({ error: err.message, code: err.code });
+    }
+    res.status(500).json({ error: "Code debug failed", message: err.message });
+  }
+});
+
+/**
+ * POST /api/code/hint - 4-level pedagogical hint ladder
+ */
+app.post("/api/code/hint", async (req, res) => {
+  const span = startSpan("code.hint", { level: req.body?.level });
+  try {
+    const parseResult = CodeHintRequestSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      span.end("validation_error");
+      return res.status(400).json({ error: "Validation Error", details: formatZodErrors(parseResult.error) });
+    }
+    const payload = parseResult.data;
+    const result = await generateCodingHint({
+      ...payload,
+      question: scrubSecretsAndPII(payload.question).text,
+      userCode: scrubSecretsAndPII(payload.userCode).text
+    });
+    span.end("ok");
+    res.json(result);
+  } catch (err) {
+    span.end("error");
+    if (err instanceof AIError || (err.code && err.code.startsWith("AI_"))) {
+      return res.status(err.status || 503).json({ error: err.message, code: err.code });
+    }
+    res.status(500).json({ error: "Hint generation failed", message: err.message });
+  }
+});
+
+/**
+ * POST /api/code/explain - Multi-level code explanation (Simple / Technical / Interview)
+ */
+app.post("/api/code/explain", async (req, res) => {
+  const span = startSpan("code.explain", { explanationLevel: req.body?.explanationLevel });
+  try {
+    const parseResult = CodeExplainRequestSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      span.end("validation_error");
+      return res.status(400).json({ error: "Validation Error", details: formatZodErrors(parseResult.error) });
+    }
+    const { question, code, language, explanationLevel } = parseResult.data;
+    const staticCheck = runStaticCodeAnalysis(code, language);
+    const parsed = await defaultAIClient.generateJson({
+      systemPrompt:
+        "Explain the supplied code clearly at the requested depth (Simple: intuitive analogy; Technical: invariants & data structures; Interview: optimality, trade-offs, follow-ups). " +
+        "Return JSON: {\"summary\":\"...\",\"walkthrough\":[\"...\"],\"edgeCases\":[\"...\"],\"timeComplexity\":\"...\",\"spaceComplexity\":\"...\"}",
+      userPrompt: `Question:\n${scrubSecretsAndPII(question).text}\nLanguage: ${language}\nLevel: ${explanationLevel}\nCode:\n${scrubSecretsAndPII(code).text}`,
+      temperature: 0.1
+    });
+    span.end("ok");
+    res.json({
+      language: staticCheck.language,
+      explanationLevel,
+      summary: parsed?.summary || "Walkthrough of the submitted implementation.",
+      walkthrough: Array.isArray(parsed?.walkthrough) ? parsed.walkthrough : [],
+      edgeCases: Array.isArray(parsed?.edgeCases) ? parsed.edgeCases : [],
+      staticAnalysis: staticCheck
+    });
+  } catch (err) {
+    span.end("error");
+    if (err instanceof AIError || (err.code && err.code.startsWith("AI_"))) {
+      return res.status(err.status || 503).json({ error: err.message, code: err.code });
+    }
+    res.status(500).json({ error: "Code explanation failed", message: err.message });
+  }
+});
+
+/**
+ * POST /api/code/complexity - Static + empirical sandbox complexity analysis
+ */
+app.post("/api/code/complexity", async (req, res) => {
+  const span = startSpan("code.complexity");
+  try {
+    const parseResult = CodeComplexityRequestSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      span.end("validation_error");
+      return res.status(400).json({ error: "Validation Error", details: formatZodErrors(parseResult.error) });
+    }
+    const { code, language, measureEmpirical } = parseResult.data;
+    const result = await estimateComplexity({ code, language, measureEmpirical });
+    span.end("ok");
+    res.json(result);
+  } catch (err) {
+    span.end("error");
+    res.status(500).json({ error: "Complexity estimation failed", message: err.message });
+  }
+});
+
+/**
+ * GET /api/traces - Localhost-only redacted trace viewer
+ */
+app.get("/api/traces", (_req, res) => {
+  res.json({
+    semanticCacheEnabled: isSemanticCacheEnabled(),
+    spans: getRecentSpans(50)
   });
 });
 

@@ -7,8 +7,12 @@
     "storage",
     "activeTab",
     "scripting",
-    "contextMenus"
+    "contextMenus",
+    "sidePanel"
   ],
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
   "commands": {
     "analyze_question": {
       "suggested_key": {
@@ -44,6 +48,8 @@
       "matches": ["<all_urls>"],
       "js": [
         "extractors/BaseExtractor.js",
+        "extractors/EditorAdapters.js",
+        "extractors/ProblemAdapters.js",
         "extractors/GenericExtractor.js",
         "extractors/MoodleAdapter.js",
         "extractors/CanvasAdapter.js",

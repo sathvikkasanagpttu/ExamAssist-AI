@@ -1,0 +1,8 @@
+{
+  "name": "@examassist/shared",
+  "version": "2.2.0",
+  "private": true,
+  "type": "module",
+  "main": "./schemas.js",
+  "types": "./schemas.d.ts"
+}
