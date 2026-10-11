@@ -39,10 +39,17 @@ const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS
 
 app.use(cors({
   origin: (origin, callback) => {
-    const matchesAllowedOrigin = allowedOrigins.includes(origin) || allowedOrigins.some((rule) =>
-      rule.endsWith("://*") && origin?.startsWith(rule.slice(0, -1))
-    );
-    if (!origin || allowedOrigins.includes("*") || matchesAllowedOrigin) {
+    // Allow requests without Origin, "null" origin (file://), chrome-extension://, or when "*" / dev mode is active
+    const matchesAllowedOrigin =
+      !origin ||
+      origin === "null" ||
+      origin.startsWith("chrome-extension://") ||
+      allowedOrigins.includes("*") ||
+      allowedOrigins.includes(origin) ||
+      allowedOrigins.some((rule) => rule.endsWith("://*") && origin?.startsWith(rule.slice(0, -1))) ||
+      process.env.NODE_ENV !== "production";
+
+    if (matchesAllowedOrigin) {
       callback(null, true);
     } else {
       callback(new Error("CORS origin not allowed by policy"));
@@ -60,7 +67,7 @@ app.use(createRateLimiter({
 }));
 
 const port = Number(process.env.PORT || 8787);
-const host = process.env.HOST || "127.0.0.1";
+const host = process.env.HOST || "0.0.0.0";
 const kbUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: Number(process.env.KB_MAX_UPLOAD_BYTES || 10 * 1024 * 1024), files: 1 } });
 void initializeKnowledgeBase();
 
@@ -432,8 +439,9 @@ app.post("/api/analyze", (req, res) => {
   });
 });
 
-// Start Server
-if (process.env.NODE_ENV !== "test") {
+// Start Server (skip when running under node --test or NODE_ENV=test)
+const isTestRun = process.env.NODE_ENV === "test" || process.execArgv.includes("--test") || process.argv.includes("--test");
+if (!isTestRun) {
   app.listen(port, host, () => {
     logger.info(`ExamAssist AI Server running on port ${port}`, { port });
     console.log(`ExamAssist AI Server active on http://localhost:${port}`);
