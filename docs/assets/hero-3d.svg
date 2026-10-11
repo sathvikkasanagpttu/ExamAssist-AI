@@ -1,0 +1,185 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 340" width="100%" height="340">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#050816"/>
+      <stop offset="50%" stop-color="#0b112c"/>
+      <stop offset="100%" stop-color="#071a3e"/>
+    </linearGradient>
+    <linearGradient id="cyanGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f2fe"/>
+      <stop offset="100%" stop-color="#4facfe"/>
+    </linearGradient>
+    <linearGradient id="purpleGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#6366f1"/>
+    </linearGradient>
+    <linearGradient id="emeraldGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+    <filter id="shadow3d" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="14" stdDeviation="12" flood-color="#000000" flood-opacity="0.65"/>
+    </filter>
+    <style>
+      .grid-line { stroke: rgba(79, 172, 254, 0.14); stroke-width: 1; }
+      .float-1 { animation: floatA 5s ease-in-out infinite; }
+      .float-2 { animation: floatB 6s ease-in-out infinite; }
+      .float-3 { animation: floatC 4.5s ease-in-out infinite; }
+      .orbit-cw { transform-origin: 830px 170px; animation: spinCW 18s linear infinite; }
+      .orbit-ccw { transform-origin: 830px 170px; animation: spinCCW 14s linear infinite; }
+      .pulse-node { animation: pulseGlow 2.6s ease-in-out infinite; }
+      .beam { stroke-dasharray: 8 10; animation: dashMove 1.8s linear infinite; }
+      @keyframes floatA {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-12px); }
+      }
+      @keyframes floatB {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(10px); }
+      }
+      @keyframes floatC {
+        0%, 100% { transform: translateY(-6px); }
+        50% { transform: translateY(8px); }
+      }
+      @keyframes spinCW {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      @keyframes spinCCW {
+        from { transform: rotate(360deg); }
+        to { transform: rotate(0deg); }
+      }
+      @keyframes pulseGlow {
+        0%, 100% { opacity: 0.75; }
+        50% { opacity: 1; }
+      }
+      @keyframes dashMove {
+        to { stroke-dashoffset: -36; }
+      }
+      .title-text { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; font-weight: 800; fill: #ffffff; letter-spacing: -0.5px; }
+      .sub-text { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; font-weight: 500; fill: #94a3b8; }
+      .badge-text { font-family: 'SFMono-Regular', Consolas, monospace; font-weight: 700; font-size: 11px; fill: #e2e8f0; }
+    </style>
+  </defs>
+
+  <!-- Deep Space 3D Canvas -->
+  <rect width="1100" height="340" rx="20" fill="url(#bgGrad)"/>
+
+  <!-- 3D Perspective Floor Grid -->
+  <g opacity="0.65">
+    <line x1="0" y1="250" x2="1100" y2="250" class="grid-line"/>
+    <line x1="0" y1="275" x2="1100" y2="275" class="grid-line"/>
+    <line x1="0" y1="302" x2="1100" y2="302" class="grid-line"/>
+    <line x1="0" y1="330" x2="1100" y2="330" class="grid-line"/>
+    <line x1="550" y1="190" x2="-100" y2="340" class="grid-line"/>
+    <line x1="550" y1="190" x2="150" y2="340" class="grid-line"/>
+    <line x1="550" y1="190" x2="360" y2="340" class="grid-line"/>
+    <line x1="550" y1="190" x2="550" y2="340" class="grid-line"/>
+    <line x1="550" y1="190" x2="740" y2="340" class="grid-line"/>
+    <line x1="550" y1="190" x2="950" y2="340" class="grid-line"/>
+    <line x1="550" y1="190" x2="1200" y2="340" class="grid-line"/>
+  </g>
+
+  <!-- Ambient Glowing Nebulae -->
+  <circle cx="830" cy="170" r="130" fill="url(#cyanGlow)" opacity="0.12" filter="url(#glow)"/>
+  <circle cx="660" cy="110" r="90" fill="url(#purpleGlow)" opacity="0.14" filter="url(#glow)"/>
+
+  <!-- Left Column: Hero Typography & Live 3D Pill Badges -->
+  <g transform="translate(52, 56)">
+    <!-- Top Pill -->
+    <rect x="0" y="0" width="335" height="28" rx="14" fill="rgba(15, 23, 42, 0.85)" stroke="#38bdf8" stroke-width="1.2"/>
+    <circle cx="16" cy="14" r="5" fill="#10b981" class="pulse-node"/>
+    <text x="30" y="18" class="badge-text">EVIDENCE-FIRST AI ARCHITECTURE • v2.1</text>
+
+    <!-- Main Title -->
+    <text x="0" y="78" class="title-text" font-size="44">ExamAssist AI</text>
+    <text x="0" y="114" class="title-text" font-size="22" fill="url(#cyanGlow)">Solve-First Academic Copilot &amp; Verification Engine</text>
+
+    <text x="0" y="150" class="sub-text" font-size="14.5">
+      Multi-pass first-principles solver, Hybrid pgvector RAG, Docker Code/SQL Sandbox,
+    </text>
+    <text x="0" y="172" class="sub-text" font-size="14.5">
+      SymPy + mathjs verification, and 236-question calibrated evaluation harness.
+    </text>
+
+    <!-- 3D Feature Cards -->
+    <g transform="translate(0, 198)" filter="url(#shadow3d)">
+      <g class="float-1">
+        <rect x="0" y="0" width="142" height="52" rx="10" fill="#0f172a" stroke="#38bdf8" stroke-width="1.3"/>
+        <text x="14" y="21" class="badge-text" fill="#38bdf8">SOLVE-FIRST</text>
+        <text x="14" y="38" class="sub-text" font-size="11.5">Pass 1 → Evidence → TieBreak</text>
+      </g>
+      <g class="float-2" transform="translate(156, 0)">
+        <rect x="0" y="0" width="142" height="52" rx="10" fill="#0f172a" stroke="#a855f7" stroke-width="1.3"/>
+        <text x="14" y="21" class="badge-text" fill="#c084fc">HYBRID RAG</text>
+        <text x="14" y="38" class="sub-text" font-size="11.5">pgvector + FTS + RRF</text>
+      </g>
+      <g class="float-3" transform="translate(312, 0)">
+        <rect x="0" y="0" width="148" height="52" rx="10" fill="#0f172a" stroke="#10b981" stroke-width="1.3"/>
+        <text x="14" y="21" class="badge-text" fill="#34d399">TOOL SANDBOX</text>
+        <text x="14" y="38" class="sub-text" font-size="11.5">Docker • SQLite • SymPy</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Right Column: 3D Isometric Hologram Cube & Orbital Rings -->
+  <g>
+    <!-- Outer Orbital Ring -->
+    <g class="orbit-cw">
+      <ellipse cx="830" cy="170" rx="145" ry="58" fill="none" stroke="url(#cyanGlow)" stroke-width="1.5" stroke-dasharray="10 6" opacity="0.65"/>
+      <circle cx="975" cy="170" r="6" fill="#00f2fe" filter="url(#glow)"/>
+      <circle cx="685" cy="170" r="5" fill="#a855f7" filter="url(#glow)"/>
+    </g>
+
+    <!-- Inner Counter-Rotating Orbital Ring -->
+    <g class="orbit-ccw">
+      <ellipse cx="830" cy="170" rx="112" ry="112" fill="none" stroke="url(#purpleGlow)" stroke-width="1.2" stroke-dasharray="4 8" opacity="0.45"/>
+      <circle cx="830" cy="58" r="5" fill="#34d399" filter="url(#glow)"/>
+      <circle cx="830" cy="282" r="5" fill="#38bdf8" filter="url(#glow)"/>
+    </g>
+
+    <!-- Floating 3D Isometric Cube Stack -->
+    <g class="float-1" filter="url(#shadow3d)">
+      <!-- Base Platform Layer (Verification & Confidence) -->
+      <polygon points="830,210 920,252 830,294 740,252" fill="#0f172a" stroke="#10b981" stroke-width="1.8"/>
+      <polygon points="740,252 830,294 830,312 740,270" fill="#064e3b" opacity="0.85"/>
+      <polygon points="920,252 830,294 830,312 920,270" fill="#047857" opacity="0.85"/>
+
+      <!-- Middle Layer (Reasoning & RAG Matrix) -->
+      <polygon points="830,152 920,194 830,236 740,194" fill="#1e1b4b" stroke="#a855f7" stroke-width="1.8" opacity="0.95"/>
+      <polygon points="740,194 830,236 830,254 740,212" fill="#3b0764" opacity="0.85"/>
+      <polygon points="920,194 830,236 830,254 920,212" fill="#4c1d95" opacity="0.85"/>
+
+      <!-- Top Layer (3D AI Core Cube) -->
+      <!-- Top Face -->
+      <polygon points="830,74 895,106 830,138 765,106" fill="url(#cyanGlow)" opacity="0.9"/>
+      <!-- Left Face -->
+      <polygon points="765,106 830,138 830,188 765,156" fill="#0284c7" opacity="0.9"/>
+      <!-- Right Face -->
+      <polygon points="895,106 830,138 830,188 895,156" fill="#0369a1" opacity="0.95"/>
+
+      <!-- Energy Data Beams Connecting Layers -->
+      <line x1="830" y1="188" x2="830" y2="294" stroke="#00f2fe" stroke-width="2.5" class="beam"/>
+      <line x1="765" y1="156" x2="740" y2="252" stroke="#a855f7" stroke-width="1.8" class="beam"/>
+      <line x1="895" y1="156" x2="920" y2="252" stroke="#10b981" stroke-width="1.8" class="beam"/>
+    </g>
+
+    <!-- Floating Satellite Labels around the 3D Core -->
+    <g class="float-2" filter="url(#shadow3d)">
+      <rect x="615" y="72" width="118" height="32" rx="8" fill="rgba(15,23,42,0.9)" stroke="#38bdf8" stroke-width="1.2"/>
+      <text x="628" y="92" class="badge-text" fill="#38bdf8">⚡ SSE Stream</text>
+    </g>
+    <g class="float-3" filter="url(#shadow3d)">
+      <rect x="935" y="96" width="128" height="32" rx="8" fill="rgba(15,23,42,0.9)" stroke="#a855f7" stroke-width="1.2"/>
+      <text x="947" y="116" class="badge-text" fill="#c084fc">🧠 3x Vote MCQ</text>
+    </g>
+    <g class="float-2" filter="url(#shadow3d)">
+      <rect x="930" y="226" width="136" height="32" rx="8" fill="rgba(15,23,42,0.9)" stroke="#10b981" stroke-width="1.2"/>
+      <text x="942" y="246" class="badge-text" fill="#34d399">🛡️ Calibrated</text>
+    </g>
+  </g>
+</svg>

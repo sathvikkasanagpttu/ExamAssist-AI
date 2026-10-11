@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 280" width="100%" height="280">
+  <defs>
+    <linearGradient id="solverBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#040814"/>
+      <stop offset="100%" stop-color="#0b132b"/>
+    </linearGradient>
+    <filter id="drop3d" x="-15%" y="-15%" width="130%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="7" flood-color="#000000" flood-opacity="0.65"/>
+    </filter>
+    <style>
+      .pod-1 { animation: podHover 4.2s ease-in-out infinite 0s; }
+      .pod-2 { animation: podHover 4.2s ease-in-out infinite 0.7s; }
+      .pod-3 { animation: podHover 4.2s ease-in-out infinite 1.4s; }
+      .pod-4 { animation: podHover 4.2s ease-in-out infinite 2.1s; }
+      .ring-pulse { animation: ringExpand 2.8s ease-out infinite; transform-origin: center; }
+      @keyframes podHover {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-10px); }
+      }
+      @keyframes ringExpand {
+        0% { opacity: 0.9; r: 16; }
+        100% { opacity: 0; r: 34; }
+      }
+      .pod-title { font-family: 'Segoe UI', system-ui, sans-serif; font-weight: 800; font-size: 14px; fill: #ffffff; }
+      .pod-badge { font-family: 'SFMono-Regular', Consolas, monospace; font-weight: 700; font-size: 10.5px; }
+      .pod-desc { font-family: 'Segoe UI', system-ui, sans-serif; font-size: 11.5px; fill: #94a3b8; }
+    </style>
+  </defs>
+
+  <rect width="1100" height="280" rx="18" fill="url(#solverBg)" stroke="#1e293b" stroke-width="1.5"/>
+
+  <text x="550" y="36" text-anchor="middle" font-family="'Segoe UI', system-ui, sans-serif" font-weight="800" font-size="15.5" fill="#e2e8f0" letter-spacing="1">
+    3D SPECIALIZED SOLVER PODS &amp; ISOLATED EXECUTION SANDBOXES
+  </text>
+
+  <!-- POD 1: Math & Symbolic Engine -->
+  <g class="pod-1" filter="url(#drop3d)">
+    <polygon points="155,72 250,94 250,232 155,252 60,232 60,94" fill="#0f172a" stroke="#38bdf8" stroke-width="1.6"/>
+    <polygon points="155,252 250,232 250,244 155,264 60,244 60,232" fill="#0284c7" opacity="0.55"/>
+    <circle cx="155" cy="112" r="22" fill="rgba(56,189,248,0.15)" stroke="#38bdf8" stroke-width="1.5"/>
+    <circle cx="155" cy="112" r="16" fill="none" stroke="#38bdf8" class="ring-pulse"/>
+    <text x="155" y="117" text-anchor="middle" class="pod-badge" fill="#38bdf8">∑ f(x)</text>
+    <text x="155" y="156" text-anchor="middle" class="pod-title">Math &amp; SymPy</text>
+    <text x="155" y="178" text-anchor="middle" class="pod-desc">Deterministic mathjs</text>
+    <text x="155" y="196" text-anchor="middle" class="pod-desc">+ SymPy Algebra/Calc</text>
+    <text x="155" y="220" text-anchor="middle" class="pod-badge" fill="#38bdf8">✓ Verified by: calculator</text>
+  </g>
+
+  <!-- POD 2: Multi-Language Code Sandbox -->
+  <g class="pod-2" filter="url(#drop3d)">
+    <polygon points="418,72 513,94 513,232 418,252 323,232 323,94" fill="#0f172a" stroke="#a855f7" stroke-width="1.6"/>
+    <polygon points="418,252 513,232 513,244 418,264 323,244 323,232" fill="#7e22ce" opacity="0.55"/>
+    <circle cx="418" cy="112" r="22" fill="rgba(168,85,247,0.15)" stroke="#a855f7" stroke-width="1.5"/>
+    <circle cx="418" cy="112" r="16" fill="none" stroke="#a855f7" class="ring-pulse"/>
+    <text x="418" y="117" text-anchor="middle" class="pod-badge" fill="#c084fc">&lt;/&gt;</text>
+    <text x="418" y="156" text-anchor="middle" class="pod-title">Docker Sandbox</text>
+    <text x="418" y="178" text-anchor="middle" class="pod-desc">Python • JS • C • C++ • Java</text>
+    <text x="418" y="196" text-anchor="middle" class="pod-desc">No Net • Read-Only FS</text>
+    <text x="418" y="220" text-anchor="middle" class="pod-badge" fill="#c084fc">✓ Verified by: sandbox</text>
+  </g>
+
+  <!-- POD 3: Read-Only SQLite Engine -->
+  <g class="pod-3" filter="url(#drop3d)">
+    <polygon points="681,72 776,94 776,232 681,252 586,232 586,94" fill="#0f172a" stroke="#f59e0b" stroke-width="1.6"/>
+    <polygon points="681,252 776,232 776,244 681,264 586,244 586,232" fill="#d97706" opacity="0.55"/>
+    <circle cx="681" cy="112" r="22" fill="rgba(245,158,11,0.15)" stroke="#f59e0b" stroke-width="1.5"/>
+    <circle cx="681" cy="112" r="16" fill="none" stroke="#f59e0b" class="ring-pulse"/>
+    <text x="681" y="117" text-anchor="middle" class="pod-badge" fill="#fbbf24">SQL</text>
+    <text x="681" y="156" text-anchor="middle" class="pod-title">SQLite In-Memory</text>
+    <text x="681" y="178" text-anchor="middle" class="pod-desc">Ephemeral Schema Seed</text>
+    <text x="681" y="196" text-anchor="middle" class="pod-desc">Blocks DDL/DML Writes</text>
+    <text x="681" y="220" text-anchor="middle" class="pod-badge" fill="#fbbf24">✓ Verified by: sql</text>
+  </g>
+
+  <!-- POD 4: 3x Candidate Voting & Agent Loop -->
+  <g class="pod-4" filter="url(#drop3d)">
+    <polygon points="944,72 1039,94 1039,232 944,252 849,232 849,94" fill="#0f172a" stroke="#10b981" stroke-width="1.6"/>
+    <polygon points="944,252 1039,232 1039,244 944,264 849,244 849,232" fill="#059669" opacity="0.55"/>
+    <circle cx="944" cy="112" r="22" fill="rgba(16,185,129,0.15)" stroke="#10b981" stroke-width="1.5"/>
+    <circle cx="944" cy="112" r="16" fill="none" stroke="#10b981" class="ring-pulse"/>
+    <text x="944" y="117" text-anchor="middle" class="pod-badge" fill="#34d399">3x VOTE</text>
+    <text x="944" y="156" text-anchor="middle" class="pod-title">Consensus &amp; Agent</text>
+    <text x="944" y="178" text-anchor="middle" class="pod-desc">3 Independent Passes</text>
+    <text x="944" y="196" text-anchor="middle" class="pod-desc">Bounded Native Tool Loop</text>
+    <text x="944" y="220" text-anchor="middle" class="pod-badge" fill="#34d399">✓ Option Integrity</text>
+  </g>
+</svg>
