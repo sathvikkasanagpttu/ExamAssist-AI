@@ -90,7 +90,14 @@ app.use(createRateLimiter({
 const port = Number(process.env.PORT || 8787);
 const host = process.env.HOST || "0.0.0.0";
 const kbUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: Number(process.env.KB_MAX_UPLOAD_BYTES || 10 * 1024 * 1024), files: 1 } });
-void initializeKnowledgeBase();
+const isTestRun =
+  process.env.NODE_ENV === "test" ||
+  Boolean(process.env.NODE_TEST_CONTEXT) ||
+  process.execArgv.some((arg) => arg.startsWith("--test")) ||
+  process.argv.some((arg) => arg.startsWith("--test") || arg.endsWith(".test.js"));
+if (!isTestRun) {
+  void initializeKnowledgeBase();
+}
 
 function localUserId(req) {
   const value = req.get?.("x-local-user-id") || req.headers?.["x-local-user-id"];
@@ -669,7 +676,6 @@ app.get("/api/traces", (_req, res) => {
 });
 
 // Start Server (skip when running under node --test or NODE_ENV=test)
-const isTestRun = process.env.NODE_ENV === "test" || process.execArgv.includes("--test") || process.argv.includes("--test");
 if (!isTestRun) {
   app.listen(port, host, () => {
     logger.info(`ExamAssist AI Server running on port ${port}`, { port });

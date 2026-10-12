@@ -11,7 +11,7 @@ import { extractDocumentText } from "./extract.js";
 const { Pool } = pg;
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pool = process.env.KB_DATABASE_URL || process.env.DATABASE_URL
-  ? new Pool({ connectionString: process.env.KB_DATABASE_URL || process.env.DATABASE_URL, connectionTimeoutMillis: 2000 })
+  ? new Pool({ connectionString: process.env.KB_DATABASE_URL || process.env.DATABASE_URL, connectionTimeoutMillis: 2000, allowExitOnIdle: true })
   : null;
 const embeddingModel = process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
 const embeddingDimensions = 1536;

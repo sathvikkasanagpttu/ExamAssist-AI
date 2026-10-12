@@ -1,31 +1,6 @@
-{"timestamp":"2026-10-11T19:00:05.810Z","service":"ExamAssist-Backend","level":"INFO","message":"ExamAssist AI Server running on port 8787","port":8787}
+{"timestamp":"2026-10-11T19:27:11.377Z","service":"ExamAssist-Backend","level":"INFO","message":"ExamAssist AI Server running on port 8787","port":8787}
 ExamAssist AI Server active on http://localhost:8787
-{"timestamp":"2026-10-11T19:01:36.036Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"Physics","difficulty":"Intermediate"}
-{"timestamp":"2026-10-11T19:01:39.064Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":3031}
-{"timestamp":"2026-10-11T19:01:50.082Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"History","difficulty":"Intermediate"}
-{"timestamp":"2026-10-11T19:01:53.474Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":3395}
-{"timestamp":"2026-10-11T19:01:57.482Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"General Academic","difficulty":"Intermediate"}
-{"timestamp":"2026-10-11T19:02:00.648Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":3172}
-{"timestamp":"2026-10-11T19:02:04.545Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"General Academic","difficulty":"Intermediate"}
-{"timestamp":"2026-10-11T19:02:07.923Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":3385}
-{"timestamp":"2026-10-11T19:02:20.967Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"General Academic","difficulty":"Intermediate"}
-[AIClient] Model gemini-3.5-flash-lite returned 429 (rate limit / quota). Falling back to gemini-3.1-flash-lite...
-[AIClient] Model gemini-3.5-flash-lite returned 429 (rate limit / quota). Falling back to gemini-3.1-flash-lite...
-[AIClient] Model gemini-3.5-flash-lite returned 429 (rate limit / quota). Falling back to gemini-3.1-flash-lite...
-[AIClient] Model gemini-3.5-flash-lite returned 429 (rate limit / quota). Falling back to gemini-3.1-flash-lite...
-{"timestamp":"2026-10-11T19:02:36.051Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":15085}
-{"timestamp":"2026-10-11T19:02:36.062Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"History","difficulty":"Intermediate"}
-{"timestamp":"2026-10-11T19:02:37.520Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"History","difficulty":"Intermediate"}
-{"timestamp":"2026-10-11T19:02:40.400Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":4339}
-{"timestamp":"2026-10-11T19:02:41.096Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":3576}
-{"timestamp":"2026-10-11T19:03:08.102Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"Chemistry","difficulty":"Intermediate"}
-{"timestamp":"2026-10-11T19:03:11.390Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":3290}
-{"timestamp":"2026-10-11T19:03:29.178Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"History","difficulty":"Intermediate"}
-{"timestamp":"2026-10-11T19:03:32.169Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":2992}
-{"timestamp":"2026-10-11T19:03:40.246Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"History","difficulty":"Intermediate"}
-{"timestamp":"2026-10-11T19:03:47.418Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"General Academic","difficulty":"Intermediate"}
-{"timestamp":"2026-10-11T19:03:51.033Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":3614}
-{"timestamp":"2026-10-11T19:03:57.748Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"General Academic","difficulty":"Intermediate"}
-{"timestamp":"2026-10-11T19:04:01.937Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":4191}
-{"timestamp":"2026-10-11T19:04:10.658Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"MCQ","subject":"History","difficulty":"Intermediate"}
-{"timestamp":"2026-10-11T19:04:14.052Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"MCQ","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":3394}
+{"timestamp":"2026-10-11T19:30:38.190Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"CODING","subject":"Computer Science","difficulty":"Intermediate"}
+{"timestamp":"2026-10-11T19:30:43.486Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"CODING","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":5302}
+{"timestamp":"2026-10-11T19:33:21.005Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"CODING","subject":"Computer Science","difficulty":"Intermediate"}
+{"timestamp":"2026-10-11T19:33:24.379Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"CODING","subject":"Computer Science","difficulty":"Intermediate"}
