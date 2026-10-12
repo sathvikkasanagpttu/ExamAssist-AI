@@ -16,7 +16,8 @@ import {
   CodeReviewRequestSchema,
   CodeTranslateRequestSchema,
   CodeExplainErrorRequestSchema,
-  CodeAstRequestSchema
+  CodeAstRequestSchema,
+  VisionExtractRequestSchema
 } from "./schemas.js";
 import { createRateLimiter } from "./rateLimiter.js";
 import { logger } from "./logger.js";
@@ -40,6 +41,7 @@ import {
   explainCompilerOrRuntimeError
 } from "./pipeline/codingEngine.js";
 import { analyzeAstWithTreeSitter } from "./pipeline/treeSitterAnalyzer.js";
+import { extractFromVisionRegion, VisionValidationError } from "./pipeline/visionExtractor.js";
 import {
   scrubSecretsAndPII,
   startSpan,
@@ -88,7 +90,8 @@ app.use(cors({
   }
 }));
 
-// 2. Request body parser with strict size limits
+// 2. Request body parser with strict size limits (6MB only for /api/vision/extract; 64KB everywhere else)
+app.use("/api/vision/extract", express.json({ limit: "6mb" }));
 app.use(express.json({ limit: "64kb" }));
 
 // 3. Rate limiting middleware
@@ -807,6 +810,39 @@ app.post("/api/code/ast", async (req, res) => {
     res.json(ast);
   } catch (err) {
     res.status(500).json({ error: "AST analysis failed", message: err.message });
+  }
+});
+
+/**
+ * POST /api/vision/extract - User-triggered OCR + Vision extraction for captured region
+ * Images are processed strictly in memory and never stored or logged.
+ */
+app.post("/api/vision/extract", async (req, res) => {
+  const span = startSpan("vision.extract", { mimeType: req.body?.mimeType || "auto" });
+  try {
+    const parseResult = VisionExtractRequestSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      span.end("validation_error");
+      return res.status(400).json({ error: "Validation Error", details: formatZodErrors(parseResult.error) });
+    }
+    const { imageDataUrl, mimeType, hintContext } = parseResult.data;
+    const result = await extractFromVisionRegion({
+      imageDataUrl,
+      mimeType,
+      hintContext: scrubSecretsAndPII(hintContext).text
+    });
+    span.end("ok", {
+      ocrConfidence: result.ocrConfidence,
+      requiresUserConfirmation: result.requiresUserConfirmation,
+      ocrEngine: result.ocrEngine
+    });
+    res.json(result);
+  } catch (err) {
+    span.end("error", { code: err?.code || "VISION_ERROR" });
+    if (err instanceof VisionValidationError || err instanceof AIError || (err?.code && (err.code.startsWith("VISION_") || err.code.startsWith("AI_")))) {
+      return res.status(err.status || 400).json({ error: err.message, code: err.code });
+    }
+    res.status(500).json({ error: "Vision extraction failed", message: err.message });
   }
 });
 

@@ -201,6 +201,12 @@ export const CodeAstRequestSchema = z.object({
   language: z.string().max(40).optional().default("")
 });
 
+export const VisionExtractRequestSchema = z.object({
+  imageDataUrl: z.string().min(16).max(6000000),
+  mimeType: z.string().max(40).optional().default(""),
+  hintContext: z.string().max(500).optional().default("")
+});
+
 export const QuestionClassifyRequestSchema = z.object({
   question: z.string().min(3).max(25000),
   options: z.array(z.any()).optional().default([])
@@ -357,6 +363,9 @@ export const ExtensionMessageSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("EXTRACT_CODING_PROBLEM")
+  }),
+  z.object({
+    type: z.literal("CAPTURE_VISIBLE_TAB")
   }),
   z.object({
     type: z.literal("OPEN_SIDE_PANEL"),

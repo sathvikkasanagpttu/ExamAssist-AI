@@ -41,10 +41,21 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 });
 
-chrome.runtime.onMessage.addListener((message: { type?: string }, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message: { type?: string }, sender, sendResponse) => {
   if (message?.type === "OPEN_OPTIONS") {
     chrome.runtime.openOptionsPage();
     sendResponse({ ok: true });
+    return true;
+  }
+  if (message?.type === "CAPTURE_VISIBLE_TAB") {
+    const windowId = sender.tab?.windowId ?? chrome.windows.WINDOW_ID_CURRENT;
+    chrome.tabs.captureVisibleTab(windowId, { format: "png" }, (dataUrl) => {
+      if (chrome.runtime.lastError || !dataUrl) {
+        sendResponse({ ok: false, error: chrome.runtime.lastError?.message || "captureVisibleTab failed" });
+      } else {
+        sendResponse({ ok: true, dataUrl });
+      }
+    });
     return true;
   }
   return false;

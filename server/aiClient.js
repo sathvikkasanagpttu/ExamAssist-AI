@@ -307,6 +307,87 @@ export class AIClient {
   }
 
   /**
+   * Generates structured JSON from an image data URL + prompt using a vision-capable model.
+   * Never logs or persists image payloads to disk or prompt cache.
+   */
+  async generateVisionJson({
+    systemPrompt,
+    userPrompt,
+    imageDataUrl,
+    temperature = 0.1,
+    timeoutMs = 30000
+  }) {
+    if (this.usageMetrics) {
+      if (Number.isFinite(this.usageMetrics.maxCalls) && this.usageMetrics.calls >= this.usageMetrics.maxCalls) {
+        const error = new Error("EVAL_MAX_CALLS_REACHED");
+        error.code = "EVAL_MAX_CALLS_REACHED";
+        throw error;
+      }
+      this.usageMetrics.calls++;
+    }
+    if (this.mockHandler) {
+      const content = await this.mockHandler({
+        systemPrompt,
+        userPrompt,
+        imageDataUrl: "[REDACTED_IMAGE]",
+        vision: true,
+        json: true,
+        temperature
+      });
+      return extractJsonFromText(content);
+    }
+
+    if (!this.isConfigured || !this.openai) {
+      throw new AIConfigError("No AI API key configured. Add OPENAI_API_KEY in server/.env");
+    }
+
+    const visionModel = process.env.OPENAI_VISION_MODEL || this.model || "gpt-4o";
+    const messages = [
+      { role: "system", content: systemPrompt || MASTER_SYSTEM_PROMPT },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: userPrompt },
+          { type: "image_url", image_url: { url: imageDataUrl, detail: "high" } }
+        ]
+      }
+    ];
+
+    try {
+      const response = await this.openai.chat.completions.create(
+        {
+          model: visionModel,
+          messages,
+          temperature,
+          response_format: { type: "json_object" }
+        },
+        {
+          signal: AbortSignal.timeout(timeoutMs)
+        }
+      );
+      const content = response.choices?.[0]?.message?.content;
+      if (typeof content !== "string") {
+        throw new AIUnavailableError("Empty vision completion content received from AI provider");
+      }
+      return extractJsonFromText(content);
+    } catch (err) {
+      if (err instanceof AIError) throw err;
+      const msg = String(err.message || "").toLowerCase();
+      const status = err.status || err.statusCode;
+      if (status === 401 || status === 403 || msg.includes("invalid api key")) {
+        throw new AIConfigError(`Invalid API key: ${err.message}`);
+      }
+      if (status === 429 || msg.includes("rate limit") || msg.includes("quota")) {
+        throw new AIRateLimitError(err.message);
+      }
+      if (err.name === "AbortError" || err.name === "TimeoutError" || msg.includes("timeout")) {
+        throw new AITimeoutError(err.message);
+      }
+      throw new AIUnavailableError(err.message);
+    }
+  }
+
+  /**
    * Executes native OpenAI-compatible function calls with hard call, time,
    * token, and configured-cost limits. Tool output is returned to the model
    * only as data and the caller is responsible for validating every argument.

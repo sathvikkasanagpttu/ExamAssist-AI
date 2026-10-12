@@ -18,6 +18,7 @@ import {
   CodeHintRequestSchema,
   CodeExplainRequestSchema,
   CodeComplexityRequestSchema,
+  VisionExtractRequestSchema,
   ExtractedQuestionPayloadSchema,
   ExtensionMessageSchema,
   LegacyActionMessageSchema,
@@ -43,6 +44,7 @@ export type CodeDebugRequest = z.infer<typeof CodeDebugRequestSchema>;
 export type CodeHintRequest = z.infer<typeof CodeHintRequestSchema>;
 export type CodeExplainRequest = z.infer<typeof CodeExplainRequestSchema>;
 export type CodeComplexityRequest = z.infer<typeof CodeComplexityRequestSchema>;
+export type VisionExtractRequest = z.infer<typeof VisionExtractRequestSchema>;
 export type ExtractedQuestionPayload = z.infer<typeof ExtractedQuestionPayloadSchema>;
 export type ExtensionMessage = z.infer<typeof ExtensionMessageSchema>;
 export type LegacyActionMessage = z.infer<typeof LegacyActionMessageSchema>;
@@ -68,6 +70,7 @@ export {
   CodeHintRequestSchema,
   CodeExplainRequestSchema,
   CodeComplexityRequestSchema,
+  VisionExtractRequestSchema,
   ExtractedQuestionPayloadSchema,
   ExtensionMessageSchema,
   LegacyActionMessageSchema,
