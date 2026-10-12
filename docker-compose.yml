@@ -58,8 +58,8 @@ services:
       context: ./server/sandbox
       dockerfile: Dockerfile
     container_name: examassist-sandbox
-    ports:
-      - "127.0.0.1:8791:8790"
+    expose:
+      - "8790"
     read_only: true
     user: "0:0"
     cap_drop: [ALL]

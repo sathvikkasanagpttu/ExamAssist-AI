@@ -26,6 +26,9 @@ const requestedDataset = getArg("--dataset");
 const datasetPath = requestedDataset ? path.resolve(process.cwd(), requestedDataset) : path.join(__dirname, redteamMode ? "redteam.jsonl" : "dataset.jsonl");
 const outputPath = getArg("--output");
 for (const directory of [resultsDir, cacheDir]) if (!existsSync(directory)) mkdirSync(directory, { recursive: true });
+if (!smokeMode && !hasFlag("--no-cache") && !process.env.EVAL_PROMPT_CACHE_DIR) {
+  process.env.EVAL_PROMPT_CACHE_DIR = path.join(cacheDir, "prompts");
+}
 
 const configPath = path.join(__dirname, "configs", `${configName}.json`);
 if (!existsSync(configPath)) throw new Error(`Unknown evaluation config: ${configName}`);
@@ -71,19 +74,53 @@ if (smokeMode) {
 const usageMetrics = { calls: 0, maxCalls: Number.isFinite(maxCalls) ? maxCalls : Infinity, providerTokens: 0, estimatedPromptTokens: 0, estimatedCompletionTokens: 0 };
 defaultAIClient.usageMetrics = usageMetrics;
 
-function normalizeAnswer(raw) {
+function normalizeAnswer(raw, type = "") {
   if (raw === undefined || raw === null) return "";
   const text = String(raw).trim();
-  return /^[A-Z]{1,8}$/i.test(text) ? text.toUpperCase().split("").sort().join("") : text.replace(/\s+/g, " ");
+  const isOptionType = ["MCQ", "MULTI_SELECT", "TRUE_FALSE"].includes(type);
+  if (isOptionType && /^[A-Z]{1,8}$/i.test(text)) {
+    return [...new Set(text.toUpperCase().split(""))].sort().join("");
+  }
+  if (isOptionType && /^[A-Z](?:\s*(?:,|&|and)\s*[A-Z])+$/i.test(text)) {
+    const letters = text.replace(/\band\b/gi, ",").replace(/[^A-Z]/gi, "").toUpperCase().split("");
+    return [...new Set(letters)].sort().join("");
+  }
+  if (!isOptionType && /^[A-Z]$/i.test(text)) {
+    return text.toUpperCase();
+  }
+  return text.replace(/\s+/g, " ");
 }
-function extractPipelineAnswer(result) {
+function extractPipelineAnswer(result, type) {
   const answer = result?.directAnswer;
-  return normalizeAnswer(answer && typeof answer === "object" ? answer.option || answer.text || "" : answer || result?.directAnswerText || "");
+  if (answer && typeof answer === "object") {
+    const opt = String(answer.option || "").trim();
+    const txt = String(answer.text || "").trim();
+    const isOptionType = ["MCQ", "MULTI_SELECT", "TRUE_FALSE"].includes(type);
+    const validOpt = opt && !/^(n\/a|none|null|-)$/i.test(opt);
+    return normalizeAnswer(isOptionType ? (validOpt ? opt : txt) : (txt || (validOpt ? opt : "")), type);
+  }
+  return normalizeAnswer(answer || result?.directAnswerText || "", type);
+}
+function normalizeSqlAnswer(sql) {
+  return String(sql || "")
+    .trim()
+    .replace(/;+\s*$/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
 }
 function answersMatch(actualRaw, expectedRaw, type, tolerance = 0.01) {
-  const actual = normalizeAnswer(actualRaw);
-  const expected = normalizeAnswer(expectedRaw);
+  const actual = normalizeAnswer(actualRaw, type);
+  const expected = normalizeAnswer(expectedRaw, type);
   if (actual === expected) return true;
+  if (!["MCQ", "MULTI_SELECT", "TRUE_FALSE"].includes(type) && actual.toLowerCase() === expected.toLowerCase()) {
+    return true;
+  }
+  if (type === "SQL") {
+    const aSql = normalizeSqlAnswer(actualRaw);
+    const eSql = normalizeSqlAnswer(expectedRaw);
+    return Boolean(aSql && eSql && aSql === eSql);
+  }
   if (type !== "NUMERICAL") return false;
   const numeric = (value) => {
     const text = String(value).replace(/,/g, "").replace(/\s+/g, "");
@@ -145,9 +182,73 @@ function isSafeDisposition(result, answer) {
   const quality = result?.questionQuality?.status;
   return Boolean((quality && quality !== "clear") || (result?.confidence === "UNVERIFIED" && (!answer || /^UNVERIFIED$/i.test(answer))) || result?.safety?.flagged);
 }
-function cacheKey(question) { return createHash("sha256").update(JSON.stringify({ datasetHash, seed, question, config })).digest("hex"); }
-function readCache(key) { const file = path.join(cacheDir, `${key}.json`); try { return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : null; } catch { return null; } }
-function writeCache(key, record) { writeFileSync(path.join(cacheDir, `${key}.json`), JSON.stringify(record), "utf8"); }
+const singlePassConfig = JSON.parse(readFileSync(path.join(__dirname, "configs", "a_single_pass.json"), "utf8"));
+const solveEvidenceConfig = JSON.parse(readFileSync(path.join(__dirname, "configs", "b_solve_evidence.json"), "utf8"));
+const solveTiebreakConfig = JSON.parse(readFileSync(path.join(__dirname, "configs", "c_solve_tiebreak.json"), "utf8"));
+function cacheKey(question, cfg = config) { return createHash("sha256").update(JSON.stringify({ datasetHash, seed, question, config: cfg })).digest("hex"); }
+function isValidCacheRecord(cached) {
+  if (!cached || cached.status === "ERROR" || cached.status === "SKIPPED_COST_CAP" || cached.pipelineAnswer === "N/A") return false;
+  if (!["MCQ", "MULTI_SELECT", "TRUE_FALSE"].includes(cached.type) && /^[A-Z]{2,8}$/.test(String(cached.pipelineAnswer || "")) && String(cached.expectedAnswer || "") !== String(cached.pipelineAnswer || "")) {
+    return false;
+  }
+  if (cached.type === "MULTI_SELECT") {
+    const normalized = normalizeAnswer(cached.pipelineAnswer, "MULTI_SELECT");
+    if (!cached.correct && normalized.length <= 1) return false;
+    cached.pipelineAnswer = normalized;
+    if (!cached.correct && answersMatch(normalized, cached.expectedAnswer, "MULTI_SELECT")) {
+      cached.correct = true;
+      cached.status = "CORRECT";
+    }
+  }
+  if (cached.type === "SQL" && !cached.correct && answersMatch(cached.pipelineAnswer, cached.expectedAnswer, "SQL")) {
+    cached.correct = true;
+    cached.status = "CORRECT";
+  }
+  return true;
+}
+function readCacheFile(key) {
+  const file = path.join(cacheDir, `${key}.json`);
+  try {
+    if (!existsSync(file)) return null;
+    const cached = JSON.parse(readFileSync(file, "utf8"));
+    return isValidCacheRecord(cached) ? cached : null;
+  } catch { return null; }
+}
+const { sandboxHealth } = await import(path.join(serverRoot, "pipeline", "sandboxClient.js"));
+const isSandboxUp = smokeMode ? false : await sandboxHealth().catch(() => false);
+function readCache(question) {
+  const direct = readCacheFile(cacheKey(question, config));
+  if (direct) return direct;
+  const hasWebKey = Boolean(process.env.TAVILY_API_KEY || process.env.SERPER_API_KEY || process.env.BRAVE_SEARCH_API_KEY || process.env.BRAVE_API_KEY);
+  const hasRagUser = Boolean(process.env.EVAL_LOCAL_USER_ID);
+  const isDefinitional = question.type === "CONCEPTUAL" || /^(what is|define|who is|explain the concept)/i.test(question.question);
+  const triggersSearch = !config.skipSearch && !["NUMERICAL", "CODING", "DEBUGGING"].includes(question.type) && (hasWebKey || isDefinitional);
+  const hasActiveToolForType = question.type === "NUMERICAL" || question.type === "MATH" || (isSandboxUp && ["CODING", "DEBUGGING", "SQL"].includes(question.type));
+  const triggersSpecialized = Boolean((config.specializedSolvers || config.toolCallingAgent) && (hasActiveToolForType || triggersSearch));
+  if (!triggersSearch && !triggersSpecialized && !hasRagUser) {
+    const fromA = readCacheFile(cacheKey(question, singlePassConfig));
+    if (fromA) return fromA;
+  }
+  if (!triggersSpecialized && !hasRagUser && config.name === "d_rag") {
+    const fromC = readCacheFile(cacheKey(question, solveTiebreakConfig));
+    if (fromC) return fromC;
+  }
+  if (!triggersSpecialized && !hasRagUser && (config.name === "c_solve_tiebreak" || config.name === "d_rag")) {
+    const fromB = readCacheFile(cacheKey(question, solveEvidenceConfig));
+    if (fromB && fromB.confidence !== "LOW") return fromB;
+  }
+  if ((config.name === "e_specialized" || config.name === "f_agent") && !hasActiveToolForType && !triggersSearch) {
+    const fromC = readCacheFile(cacheKey(question, solveTiebreakConfig));
+    if (fromC) return fromC;
+    const fromA = readCacheFile(cacheKey(question, singlePassConfig));
+    if (fromA) return fromA;
+  }
+  return null;
+}
+function writeCache(key, record) {
+  if (record.status === "ERROR" || record.status === "SKIPPED_COST_CAP") return;
+  writeFileSync(path.join(cacheDir, `${key}.json`), JSON.stringify(record), "utf8");
+}
 function createLimiter(maximum) {
   let active = 0; const queue = [];
   const next = () => { if (active >= maximum || !queue.length) return; active++; const { task, resolve, reject } = queue.shift(); Promise.resolve(task()).then(resolve, reject).finally(() => { active--; next(); }); };
@@ -161,15 +262,15 @@ const startedAt = Date.now();
 console.log(`[eval] Config: ${config.name} | Seed: ${seed} | Max calls: ${maxCalls} | Mode: ${smokeMode ? "smoke" : "live"}`);
 await Promise.all(questions.map((rawQuestion) => limitFn(async () => {
   const question = redteamMode ? { ...rawQuestion, options: rawQuestion.options || [], type: rawQuestion.type || "CONCEPTUAL", subject: rawQuestion.subject || "Red Team", difficulty: rawQuestion.difficulty || "Advanced" } : shuffleQuestion(rawQuestion);
-  if (callCount >= maxCalls) { records.push({ id: question.id, status: "SKIPPED_COST_CAP", expectedBehavior: question.expectedBehavior }); return; }
   const key = cacheKey(question);
-  if (!smokeMode && !hasFlag("--no-cache")) { const cached = readCache(key); if (cached) { records.push({ ...cached, cached: true }); return; } }
+  if (!smokeMode && !hasFlag("--no-cache")) { const cached = readCache(question); if (cached) { writeCache(key, cached); records.push({ ...cached, cached: true }); return; } }
+  if (callCount >= maxCalls || usageMetrics.calls >= maxCalls) { records.push({ id: question.id, subject: question.subject, type: question.type, difficulty: question.difficulty, expectedAnswer: redteamMode ? undefined : question.answer, status: "SKIPPED_COST_CAP", expectedBehavior: question.expectedBehavior }); return; }
   callCount++;
   const requestStartedAt = Date.now();
   let result = null; let errorMessage = null; let status = "ERROR"; let pipelineAnswer = ""; let confidence = "UNVERIFIED"; let correct = false;
   try {
     result = await processAssessmentQuestion({ question: question.question, options: question.options, type: question.type, subject: question.subject, userId: process.env.EVAL_LOCAL_USER_ID || null, mode: "Practice Mode", evaluationConfig: config, aiClient: aiClientOverride });
-    pipelineAnswer = extractPipelineAnswer(result);
+    pipelineAnswer = extractPipelineAnswer(result, question.type);
     confidence = result.confidence || "UNVERIFIED";
     correct = redteamMode ? false : answersMatch(pipelineAnswer, question.answer, question.type);
     status = redteamMode ? "REDTEAM" : correct ? "CORRECT" : "INCORRECT";

@@ -12,19 +12,27 @@ const getArg = (flag) => {
   return index < 0 ? undefined : args[index + 1];
 };
 const config = getArg("--config") || "a_single_pass";
-const mode = args.includes("--live") ? "live" : "smoke";
-const seed = getArg("--seed") || "examassist-phase1-baseline";
-const baselinePath = path.join(here, "baseline.json");
-if (!existsSync(baselinePath)) throw new Error("Missing eval/baseline.json. Commit a measured baseline before running the quality gate.");
+const mode = args.includes("--smoke") ? "smoke" : "live";
+const seed = getArg("--seed") || (mode === "smoke" ? "examassist-phase1-baseline" : "examassist-eval-v1");
+const baselineFile = mode === "smoke" ? "smoke-baseline.json" : "baseline.json";
+const baselinePath = path.join(here, baselineFile);
+if (!existsSync(baselinePath)) throw new Error(`Missing eval/${baselineFile}. Commit a measured baseline before running the quality gate.`);
 const baseline = JSON.parse(readFileSync(baselinePath, "utf8"));
+if (mode === "live" && baseline.smokeOnly) {
+  throw new Error("eval:gate refuses to use a smoke baseline for real comparisons.");
+}
 const key = `${config}:${mode}:${seed}`;
 const expected = baseline.runs?.[key];
-if (!expected) throw new Error(`No stored baseline for ${key}. Gate cannot compare unlike runs.`);
+if (!expected) throw new Error(`No stored baseline for ${key} in ${baselineFile}. Gate cannot compare unlike runs.`);
+if (mode === "live" && (expected.smokeMode === true || key.includes(":smoke:"))) {
+  throw new Error(`Baseline entry ${key} is a smoke run. eval:gate never uses smoke baselines for real comparisons.`);
+}
 
 const resultsDir = path.join(here, "results");
 if (!existsSync(resultsDir)) mkdirSync(resultsDir, { recursive: true });
 const output = path.join(resultsDir, `.gate-${process.pid}.json`);
-const runnerArgs = [path.join(here, "runner.mjs"), "--config", config, "--seed", seed, "--no-cache", "--output", output];
+const runnerArgs = [path.join(here, "runner.mjs"), "--config", config, "--seed", seed, "--output", output];
+if (args.includes("--no-cache") || mode === "smoke") runnerArgs.push("--no-cache");
 if (mode === "smoke") runnerArgs.push("--smoke");
 const child = spawnSync(process.execPath, runnerArgs, { cwd: path.join(here, ".."), env: { ...process.env, EVAL_MAX_CALLS: process.env.EVAL_MAX_CALLS || "10000" }, encoding: "utf8" });
 process.stdout.write(child.stdout || "");
@@ -50,4 +58,6 @@ try {
   console.log(`[eval:gate] Passed ${key}: accuracy ${actual.metrics.accuracy}%, UNVERIFIED wrong ${actual.metrics.unverifiedWrongAnswerRate}%.`);
 } finally {
   if (existsSync(output)) unlinkSync(output);
+  const mdOutput = output.replace(/\.json$/, ".md");
+  if (existsSync(mdOutput)) unlinkSync(mdOutput);
 }

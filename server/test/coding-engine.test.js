@@ -10,7 +10,8 @@ import { setupStandardMocks, teardownStandardMocks } from "./test-helpers.js";
 import {
   runStaticCodeAnalysis,
   computeMinimalCodeDiff,
-  estimateComplexity
+  estimateComplexity,
+  generateCodingHint
 } from "../pipeline/codingEngine.js";
 import {
   scrubSecretsAndPII,
@@ -26,29 +27,47 @@ const __dirname = path.dirname(__filename);
 const EXTENSION_DIR = path.resolve(__dirname, "../../extension");
 
 // --- 1. Shared Schemas & Coding Dataset Validation ---
-test("Coding Eval Dataset: code-dataset.jsonl has >= 60 multi-language problems with hidden tests", () => {
+test("Coding Eval Dataset: code-dataset.jsonl has >= 150 multi-language problems with Java, C, >= 20 Advanced, hidden tests, and REVIEW.md tracking", () => {
   const datasetPath = path.resolve(__dirname, "../eval/code-dataset.jsonl");
+  const reviewDocPath = path.resolve(__dirname, "../eval/REVIEW.md");
   assert.ok(fs.existsSync(datasetPath), "code-dataset.jsonl must exist");
+  assert.ok(fs.existsSync(reviewDocPath), "REVIEW.md must exist");
+  const reviewMarkdown = fs.readFileSync(reviewDocPath, "utf8");
   const lines = fs.readFileSync(datasetPath, "utf8").trim().split("\n");
-  assert.ok(lines.length >= 60, `Expected >= 60 problems, got ${lines.length}`);
+  const rows = lines.map((line) => JSON.parse(line));
+  const scoredRows = rows.filter((r) => !r.needsReview);
+  const reviewRows = rows.filter((r) => r.needsReview);
+
+  assert.ok(scoredRows.length >= 150, `Expected >= 150 scored problems, got ${scoredRows.length}`);
 
   const languages = new Set();
   const categories = new Set();
+  const subTypes = new Set();
+  let advancedCount = 0;
 
-  for (const line of lines) {
-    const row = JSON.parse(line);
+  for (const row of rows) {
     assert.ok(row.id, "Problem must have id");
     assert.ok(row.title, "Problem must have title");
     assert.ok(row.statement.length >= 10, "Problem must have statement");
     assert.ok(Array.isArray(row.sampleTests) && row.sampleTests.length >= 1, "Must have sampleTests");
     assert.ok(Array.isArray(row.hiddenTests) && row.hiddenTests.length >= 1, "Must have hiddenTests");
-    assert.equal(row.needsReview, false, `Problem ${row.id} has unresolved needsReview`);
-    languages.add(row.language);
-    categories.add(row.category);
+    if (row.needsReview) {
+      assert.ok(reviewMarkdown.includes(row.id), `Problem ${row.id} with needsReview=true must be listed in REVIEW.md`);
+    } else {
+      languages.add(row.language);
+      categories.add(row.category);
+      subTypes.add(row.questionSubType);
+      if (row.difficulty === "Advanced") advancedCount++;
+    }
   }
 
-  assert.ok(languages.size >= 3, `Expected at least 3 languages, got: ${[...languages].join(", ")}`);
+  for (const requiredLang of ["python", "javascript", "cpp", "java", "c", "sql"]) {
+    assert.ok(languages.has(requiredLang), `Expected language ${requiredLang} in scored dataset`);
+  }
+  assert.ok(advancedCount >= 20, `Expected >= 20 Advanced problems, got ${advancedCount}`);
   assert.ok(categories.has("arrays") && categories.has("strings") && categories.has("dp") && categories.has("graphs") && categories.has("sql"));
+  assert.ok(subTypes.has("predict_the_output") && subTypes.has("debug_my_code"));
+  assert.ok(reviewRows.length >= 1, "Uncertain items should be marked needsReview and listed in REVIEW.md");
 });
 
 // --- 2. Phase 1: EditorAdapters & ProblemAdapters Unit Tests ---
@@ -179,3 +198,63 @@ test("API: /api/code/complexity and /api/traces return structured responses", as
     teardownStandardMocks();
   }
 });
+
+test("Coding Engine: generateCodingHint generates requested level lazily, retries once on invalid output, and throws typed AIError instead of canned hint", async () => {
+  // 1. Lazy single-level response (Level 2 does not leak Level 4)
+  const level2Res = await generateCodingHint({
+    question: "Find two numbers that add up to target.",
+    language: "python",
+    level: 2,
+    aiClient: {
+      generateJson: async () => ({
+        hint: "Use a hash map to store complement indices in a single pass.",
+        conceptTags: ["hash-map", "arrays"]
+      })
+    }
+  });
+  assert.equal(level2Res.requestedLevel, 2);
+  assert.equal(level2Res.activeHint, "Use a hash map to store complement indices in a single pass.");
+  assert.deepEqual(Object.keys(level2Res.hints), ["level2"]);
+  assert.equal(level2Res.hints.level4, undefined, "Must not include level 4 solution when level 2 is requested");
+
+  // 2. Retries once on invalid model response and succeeds on retry
+  let calls = 0;
+  const retryRes = await generateCodingHint({
+    question: "Find maximum subarray sum.",
+    language: "python",
+    level: 1,
+    aiClient: {
+      generateJson: async () => {
+        calls++;
+        if (calls === 1) return { invalid: true };
+        return { hint: "Track the best sum ending at the current index.", conceptTags: ["dp"] };
+      }
+    }
+  });
+  assert.equal(calls, 2);
+  assert.equal(retryRes.activeHint, "Track the best sum ending at the current index.");
+
+  // 3. Throws typed AIError if still invalid after retry (never returns a canned hint)
+  let failCalls = 0;
+  await assert.rejects(
+    () =>
+      generateCodingHint({
+        question: "Find shortest path.",
+        language: "python",
+        level: 3,
+        aiClient: {
+          generateJson: async () => {
+            failCalls++;
+            return { hint: "   " };
+          }
+        }
+      }),
+    (err) => {
+      assert.equal(err.code, "AI_INVALID_HINT_RESPONSE");
+      assert.equal(err.status, 502);
+      return true;
+    }
+  );
+  assert.equal(failCalls, 2);
+});
+

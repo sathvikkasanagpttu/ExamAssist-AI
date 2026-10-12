@@ -75,12 +75,17 @@
     const mode = document.getElementById("sp-mode")?.value;
     const gateEl = document.getElementById("sp-auth-gate");
     const contentEl = document.getElementById("sp-solution-content");
+    const codeEl = document.getElementById("sp-solution-code");
     if (mode === "Authorized Assessment Mode" && !authorizedSolutionRevealed) {
       if (gateEl) gateEl.style.display = "block";
       if (contentEl) contentEl.style.display = "none";
+      if (codeEl) codeEl.textContent = "";
     } else {
       if (gateEl) gateEl.style.display = "none";
       if (contentEl) contentEl.style.display = "block";
+      if (codeEl && currentAnalysis?.solution?.code) {
+        codeEl.textContent = currentAnalysis.solution.code;
+      }
     }
   }
 
@@ -94,18 +99,54 @@
     applyAuthorizedSolutionGate();
   });
 
-  // --- Hint Ladder ---
+  async function getApiBase() {
+    if (typeof chrome !== "undefined" && chrome.storage?.local) {
+      const cfg = await chrome.storage.local.get({ apiBase: "http://localhost:8787" });
+      return String(cfg.apiBase || "http://localhost:8787").replace(/\/+$/, "");
+    }
+    return "http://localhost:8787";
+  }
+
+  // --- Hint Ladder (Lazy per-level fetch; Level 4 not in DOM/memory until clicked) ---
   document.querySelectorAll(".hint-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", async () => {
       document.querySelectorAll(".hint-btn").forEach((b) => b.classList.remove("primary"));
       btn.classList.add("primary");
-      const level = btn.getAttribute("data-level") || "1";
+      const level = Number(btn.getAttribute("data-level") || "1");
+      const levelKey = `level${level}`;
       const out = document.getElementById("sp-hint-output");
-      if (!currentAnalysis?.hints) {
-        out.textContent = "Run problem analysis first to load progressive hints.";
+      const question = document.getElementById("sp-question")?.value?.trim() || currentAnalysis?.parsedProblem?.statement || "";
+      const userCode = document.getElementById("sp-code")?.value || "";
+      const language = document.getElementById("sp-language")?.value || currentAnalysis?.language || "python";
+      const explanationLevel = document.getElementById("sp-expl-level")?.value || "Technical";
+
+      if (!question || question.length < 3) {
+        out.textContent = "Enter or extract a problem statement first to request a hint.";
         return;
       }
-      out.textContent = currentAnalysis.hints[`level${level}`] || "No hint available for this level.";
+
+      if (currentAnalysis?.hints?.[levelKey]) {
+        out.textContent = currentAnalysis.hints[levelKey];
+        return;
+      }
+
+      out.textContent = `Generating Level ${level} hint...`;
+      try {
+        const apiBase = await getApiBase();
+        const res = await fetch(`${apiBase}/api/code/hint`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question, userCode, language, level, explanationLevel })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        if (!currentAnalysis) currentAnalysis = { hints: {} };
+        if (!currentAnalysis.hints) currentAnalysis.hints = {};
+        currentAnalysis.hints[levelKey] = data.activeHint;
+        out.textContent = data.activeHint;
+      } catch (err) {
+        out.textContent = `Hint error: ${err.message}`;
+      }
     });
   });
 
@@ -151,11 +192,9 @@
 
     statusEl.textContent = "Streaming analysis from Coding Engine...";
     try {
-      const cfg = chrome?.storage?.sync
-        ? await chrome.storage.sync.get({ apiBase: "http://localhost:8787" })
-        : { apiBase: "http://localhost:8787" };
+      const apiBase = await getApiBase();
 
-      const res = await fetch(`${cfg.apiBase}/api/code/analyze`, {
+      const res = await fetch(`${apiBase}/api/code/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question, userCode, language, explanationLevel, mode })
@@ -168,7 +207,7 @@
       applyAuthorizedSolutionGate();
 
       // Default Hint Level 1
-      document.getElementById("sp-hint-output").textContent = data.hints?.level1 || "";
+      document.getElementById("sp-hint-output").textContent = data.hints?.level1 || "Click Level 1 to request a conceptual hint.";
 
       // Solution & Badge (only show verified badge when sandbox actually ran)
       const badgeContainer = document.getElementById("sp-verified-badge");
@@ -178,7 +217,11 @@
         badgeContainer.innerHTML = `<span class="badge unverified">⚠️ Not executed in sandbox (${data.confidence})</span>`;
       }
 
-      document.getElementById("sp-solution-code").textContent = data.solution?.code || "// No code generated";
+      if (mode === "Authorized Assessment Mode" && !authorizedSolutionRevealed) {
+        document.getElementById("sp-solution-code").textContent = "// Hidden in Authorized Assessment Mode until explicitly revealed";
+      } else {
+        document.getElementById("sp-solution-code").textContent = data.solution?.code || "// No code generated";
+      }
       document.getElementById("sp-solution-expl").textContent =
         `${data.solution?.explanation || ""}\n\nWhy alternatives are slower: ${data.solution?.alternativesComparison || ""}`;
 
@@ -221,11 +264,9 @@
     }
     out.textContent = "Analyzing bug & generating minimal diff...";
     try {
-      const cfg = chrome?.storage?.sync
-        ? await chrome.storage.sync.get({ apiBase: "http://localhost:8787" })
-        : { apiBase: "http://localhost:8787" };
+      const apiBase = await getApiBase();
 
-      const res = await fetch(`${cfg.apiBase}/api/code/debug`, {
+      const res = await fetch(`${apiBase}/api/code/debug`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question, userCode, failingOutput, language, explanationLevel })

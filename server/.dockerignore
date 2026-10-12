@@ -1,6 +1,13 @@
 .env
 .env.*
+!.env.example
 node_modules/
+**/node_modules/
+*.log
 server.log
+.DS_Store
+**/.DS_Store
+*.zip
+.git/
 eval/cache/
 eval/results/

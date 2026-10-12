@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+server/.env
+server/.env.*
+!server/.env.example
+node_modules/
+**/node_modules/
+*.log
+**/*.log
+.DS_Store
+**/.DS_Store
+*.zip
+.git/
+server/eval/cache/
+server/eval/results/

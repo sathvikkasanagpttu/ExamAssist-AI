@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "smokeOnly": true,
+  "note": "Smoke-mode deterministic mock baseline only. Never used by eval:gate for real model comparisons.",
+  "tolerance": {
+    "accuracyPctPoints": 2,
+    "unverifiedWrongPctPoints": 2,
+    "calibrationPctPoints": 5
+  },
+  "runs": {
+    "a_single_pass:smoke:examassist-phase1-baseline": {
+      "smokeMode": true,
+      "datasetHash": "7fa188645d15d7a19d53a797891712708ade0d77e4fccdd6f2af4591e53a8f72",
+      "metrics": {
+        "accuracy": 19.07,
+        "unverifiedWrongAnswerRate": 100,
+        "calibration": {
+          "HIGH": { "total": 0, "correct": 0, "accuracy": null },
+          "MEDIUM": { "total": 0, "correct": 0, "accuracy": null },
+          "LOW": { "total": 0, "correct": 0, "accuracy": null },
+          "UNVERIFIED": { "total": 236, "correct": 45, "accuracy": 19.07 }
+        }
+      }
+    },
+    "a_single_pass:smoke:examassist-eval-v1": {
+      "smokeMode": true,
+      "datasetHash": "7fa188645d15d7a19d53a797891712708ade0d77e4fccdd6f2af4591e53a8f72",
+      "metrics": {
+        "accuracy": 22.88,
+        "unverifiedWrongAnswerRate": 100,
+        "calibration": {
+          "HIGH": { "total": 0, "correct": 0, "accuracy": null },
+          "MEDIUM": { "total": 0, "correct": 0, "accuracy": null },
+          "LOW": { "total": 0, "correct": 0, "accuracy": null },
+          "UNVERIFIED": { "total": 236, "correct": 54, "accuracy": 22.88 }
+        }
+      }
+    }
+  }
+}

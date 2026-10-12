@@ -5,6 +5,9 @@
  */
 
 import OpenAI from "openai";
+import { createHash } from "crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import path from "path";
 import { MASTER_SYSTEM_PROMPT } from "./prompts.js";
 
 // --- Typed AI Errors ---
@@ -101,7 +104,8 @@ export class AIClient {
     if (this.apiKey && this.apiKey !== "replace_me" && this.apiKey.trim().length > 0) {
       this.openai = new OpenAI({
         apiKey: this.apiKey,
-        baseURL: this.baseURL
+        baseURL: this.baseURL,
+        maxRetries: 1
       });
     } else {
       this.openai = null;
@@ -151,15 +155,37 @@ export class AIClient {
       { role: "user", content: userPrompt }
     ];
 
+    const promptCacheDir = process.env.EVAL_PROMPT_CACHE_DIR;
+    let promptCacheFile = null;
+    if (promptCacheDir && temperature <= 0.1) {
+      try {
+        if (!existsSync(promptCacheDir)) mkdirSync(promptCacheDir, { recursive: true });
+        const hash = createHash("sha256")
+          .update(JSON.stringify({ model: this.model, systemPrompt, userPrompt, json, temperature }))
+          .digest("hex");
+        promptCacheFile = path.join(promptCacheDir, `${hash}.json`);
+        if (existsSync(promptCacheFile)) {
+          const cached = JSON.parse(readFileSync(promptCacheFile, "utf8"));
+          if (typeof cached?.content === "string" && cached.content.length > 0) {
+            if (this.usageMetrics && cached.tokens) {
+              this.usageMetrics.providerTokens += cached.tokens;
+            }
+            return cached.content;
+          }
+        }
+      } catch {}
+    }
+
     // Build candidate models list for automatic fallback on 429 quota or 503 errors
     const modelsToTry = [this.model];
     if (this.baseURL?.includes("googleapis.com") || this.model.startsWith("gemini-")) {
       const geminiFallbacks = [
         "gemini-3.5-flash-lite",
-        "gemini-3.1-flash-lite",
-        "gemini-flash-latest",
-        "gemini-3.5-flash"
+        "gemini-flash-latest"
       ];
+      if (this.model === "gemini-3.5-flash-lite") {
+        modelsToTry.push("gemini-3.5-flash-lite", "gemini-3.5-flash-lite");
+      }
       for (const fb of geminiFallbacks) {
         if (!modelsToTry.includes(fb)) modelsToTry.push(fb);
       }
@@ -188,13 +214,18 @@ export class AIClient {
         if (typeof content !== "string") {
           throw new AIUnavailableError("Empty completion content received from AI provider");
         }
+        const usage = response.usage;
         if (this.usageMetrics) {
-          const usage = response.usage;
           if (usage?.total_tokens != null) this.usageMetrics.providerTokens += usage.total_tokens;
           else {
             this.usageMetrics.estimatedPromptTokens += Math.ceil(messages.reduce((n, m) => n + m.content.length, 0) / 4);
             this.usageMetrics.estimatedCompletionTokens += Math.ceil(content.length / 4);
           }
+        }
+        if (promptCacheFile) {
+          try {
+            writeFileSync(promptCacheFile, JSON.stringify({ content, tokens: usage?.total_tokens || 0 }), "utf8");
+          } catch {}
         }
         return content;
       } catch (err) {
@@ -210,11 +241,12 @@ export class AIClient {
         }
 
         const isRateLimit = status === 429 || msg.includes("rate limit") || msg.includes("quota exceeded") || msg.includes("insufficient_quota") || msg.includes("429");
-        const isUnavailable = status === 503 || msg.includes("high demand") || msg.includes("unavailable") || msg.includes("overloaded");
+        const isUnavailable = status === 503 || status === 404 || msg.includes("high demand") || msg.includes("unavailable") || msg.includes("overloaded");
 
         if ((isRateLimit || isUnavailable) && hasNext) {
           console.warn(`[AIClient] Model ${currentModel} returned ${status || "error"} (${isRateLimit ? "rate limit / quota" : "unavailable"}). Falling back to ${modelsToTry[i + 1]}...`);
           lastError = err;
+          if (isRateLimit) await new Promise((r) => setTimeout(r, 2500 * (i + 1)));
           continue;
         }
 
@@ -319,21 +351,30 @@ export class AIClient {
       if (totalCostUsd >= maxUsd) throw new AIBudgetError("Agent exceeded its USD budget");
 
       let response;
-      try {
-        response = await this.openai.chat.completions.create({
-          model: this.model,
-          messages,
-          tools,
-          tool_choice: "auto",
-          temperature: 0
-        }, { signal: AbortSignal.timeout(Math.max(250, maxTotalMs - (Date.now() - startedAt))) });
-      } catch (error) {
-        const message = String(error?.message || error);
-        const status = error?.status || error?.statusCode;
-        if (status === 401 || status === 403 || /invalid api key|incorrect api key/i.test(message)) throw new AIConfigError(`Invalid API key: ${message}`);
-        if (status === 429 || /rate limit|quota|429/i.test(message)) throw new AIRateLimitError(message);
-        if (/abort|timeout|timedout/i.test(message)) throw new AITimeoutError(message);
-        throw new AIUnavailableError(message);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          response = await this.openai.chat.completions.create({
+            model: this.model,
+            messages,
+            tools,
+            tool_choice: "auto",
+            temperature: 0
+          }, { signal: AbortSignal.timeout(Math.max(250, maxTotalMs - (Date.now() - startedAt))) });
+          break;
+        } catch (error) {
+          const message = String(error?.message || error);
+          const status = error?.status || error?.statusCode;
+          if (status === 401 || status === 403 || /invalid api key|incorrect api key/i.test(message)) throw new AIConfigError(`Invalid API key: ${message}`);
+          if (status === 429 || /rate limit|quota|429/i.test(message)) {
+            if (attempt < 2) {
+              await new Promise((r) => setTimeout(r, 2500 * (attempt + 1)));
+              continue;
+            }
+            throw new AIRateLimitError(message);
+          }
+          if (/abort|timeout|timedout/i.test(message)) throw new AITimeoutError(message);
+          throw new AIUnavailableError(message);
+        }
       }
 
       const message = response.choices?.[0]?.message;

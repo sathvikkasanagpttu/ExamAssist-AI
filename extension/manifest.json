@@ -23,8 +23,12 @@
     }
   },
   "host_permissions": [
-    "http://localhost:*/*",
-    "http://127.0.0.1:*/*"
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
   ],
   "icons": {
     "16": "icons/icon-16.png",
@@ -45,7 +49,15 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": [
+        "http://localhost/*",
+        "http://127.0.0.1/*",
+        "https://*.hackerrank.com/*",
+        "https://leetcode.com/*",
+        "https://*.leetcode.com/*",
+        "https://*.geeksforgeeks.org/*",
+        "https://*.instructure.com/*"
+      ],
       "js": [
         "extractors/BaseExtractor.js",
         "extractors/EditorAdapters.js",

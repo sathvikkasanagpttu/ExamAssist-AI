@@ -111,11 +111,22 @@ document.addEventListener("DOMContentLoaded", async () => {
       base = "http://localhost:8787";
       apiInput.value = base;
     }
+    try {
+      const parsed = new URL(base);
+      if (parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1" && chrome.permissions?.request) {
+        await chrome.permissions.request({ origins: [`${parsed.protocol}//${parsed.hostname}/*`] }).catch(() => {});
+      }
+      base = `${parsed.protocol}//${parsed.host}${parsed.pathname.replace(/\/+$/, "")}`;
+      apiInput.value = base;
+    } catch {
+      return showStatus("Please enter a valid http:// or https:// Backend Server URL.", true);
+    }
 
     const autoAnswer = autoCopyCheckbox ? autoCopyCheckbox.checked : false;
     const showFloating = showFloatingCheckbox ? showFloatingCheckbox.checked : true;
     const autoDetect = autoDetectCheckbox ? autoDetectCheckbox.checked : true;
 
+    config.apiBase = base;
     await chrome.storage.local.set({
       apiBase: base,
       autoAnswerOnCopy: autoAnswer,

@@ -44,7 +44,18 @@ export function validateOptionIntegrity(directAnswer, normalizedOptions) {
   let chosenOption = "";
   let chosenText = "";
 
-  if (typeof directAnswer === "object" && directAnswer !== null) {
+  if (Array.isArray(directAnswer)) {
+    const letters = directAnswer
+      .map(item => (typeof item === "object" && item !== null ? item.option : String(item || "").match(/^\s*([A-Z])(?:\b|[.)\]:\-])/i)?.[1] || item))
+      .map(l => String(l || "").trim().toUpperCase())
+      .filter(l => /^[A-Z]$/.test(l));
+    const texts = directAnswer
+      .map(item => (typeof item === "object" && item !== null ? item.text : String(item || "").replace(/^\s*[A-Z][.)\]:\-]\s*/i, "")))
+      .map(t => String(t || "").trim())
+      .filter(Boolean);
+    chosenOption = [...new Set(letters)].sort().join("");
+    chosenText = texts.join("; ").toLowerCase();
+  } else if (typeof directAnswer === "object" && directAnswer !== null) {
     chosenOption = (directAnswer.option || "").toUpperCase().trim();
     chosenText = (directAnswer.text || "").trim().toLowerCase();
   } else {
@@ -58,8 +69,21 @@ export function validateOptionIntegrity(directAnswer, normalizedOptions) {
     }
   }
 
-  // 1. Check if the option letter exists
+  // 1. Check if the option letter exists (including multi-select letter combinations like "ABC" or "A, B, C")
   const matchingByLetter = normalizedOptions.find(o => o.option === chosenOption);
+  if (!matchingByLetter && chosenOption) {
+    const cleanedLetters = chosenOption.replace(/[^A-Z]/g, "").split("").filter((l, i, arr) => arr.indexOf(l) === i);
+    const looksLikeMultiCode = /^[A-Z](?:[\s,&/and]*[A-Z])+$/i.test(chosenOption);
+    if (looksLikeMultiCode && cleanedLetters.length >= 2 && cleanedLetters.every(l => normalizedOptions.some(o => o.option === l))) {
+      const sorted = [...cleanedLetters].sort();
+      const matchedTexts = sorted.map(l => normalizedOptions.find(o => o.option === l)?.text || "").filter(Boolean);
+      return {
+        valid: true,
+        option: sorted.join(""),
+        text: matchedTexts.join("; ")
+      };
+    }
+  }
 
   // 2. Check if the option text exists (exact match prioritized over substring)
   let matchingByText = normalizedOptions.find(o => o.text.toLowerCase().trim() === chosenText);
@@ -99,6 +123,37 @@ export function validateOptionIntegrity(directAnswer, normalizedOptions) {
     valid: false,
     reason: `Selected option '${chosenOption || chosenText}' does not match any provided options.`
   };
+}
+
+function coerceDirectAnswerShape(directAnswer, normalizedOptions) {
+  if (Array.isArray(directAnswer)) {
+    const letters = directAnswer
+      .map(item => (typeof item === "object" && item !== null ? item.option : String(item || "").match(/^\s*([A-Z])(?:\b|[.)\]:\-])/i)?.[1] || item))
+      .map(l => String(l || "").trim().toUpperCase())
+      .filter(l => /^[A-Z]$/.test(l));
+    const texts = directAnswer
+      .map(item => (typeof item === "object" && item !== null ? item.text : String(item || "").replace(/^\s*[A-Z][.)\]:\-]\s*/i, "")))
+      .map(t => String(t || "").trim())
+      .filter(Boolean);
+    return {
+      option: [...new Set(letters)].sort().join(""),
+      text: texts.join("; ")
+    };
+  }
+  if (typeof directAnswer === "string") {
+    const match = normalizedOptions.length > 0 ? directAnswer.match(/^([A-Z0-9])[\.\)\:\-\]]\s*(.*)$/i) : null;
+    if (match) {
+      return { option: match[1].toUpperCase(), text: match[2].trim() };
+    }
+    return { option: "", text: directAnswer.trim() };
+  }
+  if (directAnswer && typeof directAnswer === "object") {
+    const optStr = String(directAnswer.option || "").trim();
+    if (normalizedOptions.length === 0 || /^(n\/a|none|null|-)$/i.test(optStr)) {
+      return { ...directAnswer, option: "", text: String(directAnswer.text || "").trim() };
+    }
+  }
+  return directAnswer;
 }
 
 /**
@@ -145,15 +200,7 @@ async function runSingleSolverPass({
   }
 
   // Normalize directAnswer
-  let directAnswer = parsed.directAnswer;
-  if (typeof directAnswer === "string") {
-    const match = directAnswer.match(/^([A-Z0-9])[\.\)\:\-\]]\s*(.*)$/i);
-    if (match) {
-      directAnswer = { option: match[1].toUpperCase(), text: match[2].trim() };
-    } else {
-      directAnswer = { option: "", text: directAnswer.trim() };
-    }
-  }
+  let directAnswer = coerceDirectAnswerShape(parsed.directAnswer, normalizedOptions);
 
   // Validate option integrity
   if (normalizedOptions.length > 0) {
@@ -170,13 +217,16 @@ async function runSingleSolverPass({
 
         if (repaired && (repaired.directAnswer || repaired.ownSolution)) {
           parsed = repaired;
-          directAnswer = parsed.directAnswer;
+          directAnswer = coerceDirectAnswerShape(parsed.directAnswer, normalizedOptions);
         }
       } catch (repairErr) {
         console.warn("[ReasoningEngine] Option integrity repair failed:", repairErr.message);
       }
+    } else if (integrity.option && typeof directAnswer === "object" && directAnswer !== null) {
+      directAnswer = { ...directAnswer, option: integrity.option, text: directAnswer.text || integrity.text };
     }
   }
+  parsed.directAnswer = directAnswer;
 
   return { parsed, directAnswer };
 }
@@ -382,7 +432,7 @@ export async function generateReasonedAnswer({
     }
   }
 
-  if (specializedSolvers && normalizedOptions.length >= 2 && ["MCQ", "MULTI_SELECT", "TRUE_FALSE"].includes(questionType)) {
+  if (specializedSolvers && normalizedOptions.length >= 2 && ["MCQ", "MULTI_SELECT", "TRUE_FALSE"].includes(questionType) && (sources.length > 0 || toolEvidence.length > 0)) {
     const voting = await generateMCQCandidates({
       question, options: normalizedOptions.map((item) => `${item.option}. ${item.text}`), sources, aiClient, toolEvidence
     });

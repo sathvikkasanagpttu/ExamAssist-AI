@@ -1,5 +1,5 @@
 import { safeMathEvaluate } from "./calculator.js";
-import { executeInSandbox, executeSqlInSandbox, executeSymbolic } from "./sandboxClient.js";
+import { executeInSandbox, executeSqlInSandbox, executeSymbolic, sandboxHealth } from "./sandboxClient.js";
 
 const MATH_TYPES = new Set(["MATH", "NUMERICAL"]);
 export function routeSolver(questionType) {
@@ -76,56 +76,75 @@ export async function runSpecializedSolver({ question, questionType, options = [
       }
     }
   } else if (family === "CODING" || family === "DEBUGGING") {
-    const extract = await aiClient.generateJson({
-      systemPrompt: `${EXTRACTION_SYSTEM} Return {"language":"python|javascript|c|cpp|java","code":"...","tests":[{"stdin":"...","expectedOutput":"..."}]}. If code is supplied, preserve its behavior and use stated inputs. If the question requests implementation, write a complete minimal implementation with up to 5 small test inputs.`,
-      userPrompt: `Question:\n${question}\nProvided code:\n${codeSnippet || fencedCode(question) || "none"}`,
-      temperature: 0
-    });
-    const code = String(codeSnippet || fencedCode(question) || extract?.code || "");
-    const rawLanguage = String(extract?.language || "").toLowerCase();
-    const language = ({ py: "python", python: "python", js: "javascript", javascript: "javascript", "c++": "cpp", cpp: "cpp", c: "c", java: "java" })[rawLanguage] || rawLanguage;
-    const testInputs = Array.isArray(extract?.tests) && extract.tests.length ? extract.tests.slice(0, 5) : [{ stdin: "" }];
-    const runs = code ? await Promise.all(testInputs.map((input) => executeInSandbox({ language, code, stdin: String(input?.stdin || ""), timeoutSeconds: 2 }))) : [{ executed: false, error: "No code was available to execute" }];
-    const run = runs[0];
-    const executed = runs.every((item) => item.executed);
-    const expectedMatches = runs.every((item, index) => !testInputs[index]?.expectedOutput || item.stdout?.trim() === String(testInputs[index].expectedOutput).trim());
-    const allSucceeded = executed && runs.every((item) => item.success) && expectedMatches;
-    toolEvidence.push({ tool: "sandbox", executed, success: allSucceeded, language, output: runs.map((item, index) => `Test ${index + 1}: ${item.executed ? JSON.stringify({ stdout: item.stdout, stderr: item.stderr, exitCode: item.exitCode, timedOut: item.timedOut }) : item.error}`).join("\n"), expectedOutputMatches: expectedMatches });
-    if (!allSucceeded) toolFailure = true;
-    const explanation = await aiClient.generateJson({
-      systemPrompt: "Explain observed program execution accurately. Do not claim execution if it did not happen. Return JSON with explanation and directAnswer.",
-      userPrompt: `Question: ${question}\nExecution results: ${executed ? JSON.stringify(runs) : "NOT EXECUTED: " + run.error}`,
-      temperature: 0
-    });
-    if (executed && allSucceeded) {
-      llmResult = { ...llmResult, ...explanation, directAnswer: explanation?.directAnswer || llmResult?.directAnswer };
-      directAnswer = llmResult.directAnswer;
-    } else {
+    const isSandboxUp = await sandboxHealth();
+    if (!isSandboxUp) {
+      toolEvidence.push({ tool: "sandbox", executed: false, success: false, output: "Test 1: Sandbox service was unreachable", expectedOutputMatches: false });
+      toolFailure = true;
       confidence = "UNVERIFIED";
       confidenceReason = "The Docker sandbox was unavailable; the code was not executed.";
+    } else {
+      const extract = await aiClient.generateJson({
+        systemPrompt: `${EXTRACTION_SYSTEM} Return {"language":"python|javascript|c|cpp|java","code":"...","tests":[{"stdin":"...","expectedOutput":"..."}]}. If code is supplied, preserve its behavior and use stated inputs. If the question requests implementation, write a complete minimal implementation with up to 5 small test inputs.`,
+        userPrompt: `Question:\n${question}\nProvided code:\n${codeSnippet || fencedCode(question) || "none"}`,
+        temperature: 0
+      });
+      const code = String(codeSnippet || fencedCode(question) || extract?.code || "");
+      const rawLanguage = String(extract?.language || "").toLowerCase();
+      const language = ({ py: "python", python: "python", js: "javascript", javascript: "javascript", "c++": "cpp", cpp: "cpp", c: "c", java: "java" })[rawLanguage] || rawLanguage;
+      const testInputs = Array.isArray(extract?.tests) && extract.tests.length ? extract.tests.slice(0, 5) : [{ stdin: "" }];
+      const runs = code ? await Promise.all(testInputs.map((input) => executeInSandbox({ language, code, stdin: String(input?.stdin || ""), timeoutSeconds: 2 }))) : [{ executed: false, error: "No code was available to execute" }];
+      const run = runs[0];
+      const executed = runs.every((item) => item.executed);
+      const expectedMatches = runs.every((item, index) => !testInputs[index]?.expectedOutput || item.stdout?.trim() === String(testInputs[index].expectedOutput).trim());
+      const allSucceeded = executed && runs.every((item) => item.success) && expectedMatches;
+      toolEvidence.push({ tool: "sandbox", executed, success: allSucceeded, language, output: runs.map((item, index) => `Test ${index + 1}: ${item.executed ? JSON.stringify({ stdout: item.stdout, stderr: item.stderr, exitCode: item.exitCode, timedOut: item.timedOut }) : item.error}`).join("\n"), expectedOutputMatches: expectedMatches });
+      if (!allSucceeded) toolFailure = true;
+      if (executed && allSucceeded) {
+        const explanation = await aiClient.generateJson({
+          systemPrompt: "Explain observed program execution accurately. Do not claim execution if it did not happen. Return JSON with explanation and directAnswer.",
+          userPrompt: `Question: ${question}\nExecution results: ${JSON.stringify(runs)}`,
+          temperature: 0
+        });
+        llmResult = { ...llmResult, ...explanation, directAnswer: explanation?.directAnswer || llmResult?.directAnswer };
+        directAnswer = llmResult.directAnswer;
+      } else {
+        confidence = "UNVERIFIED";
+        confidenceReason = "The Docker sandbox was unavailable; the code was not executed.";
+      }
     }
   } else if (family === "SQL") {
-    const extracted = await aiClient.generateJson({
-      systemPrompt: `${EXTRACTION_SYSTEM} Return {"schema":"CREATE TABLE and INSERT statements only","query":"one SELECT or CTE","expectedRows":[]|null}. Put setup statements only in schema. Never put DDL/DML in query.`,
-      userPrompt: `Extract schema, sample rows and candidate query from the SQL question. Preserve explicitly provided SQL and data. Question:\n${question}`,
-      temperature: 0
-    });
-    const candidate = String(extracted?.query || "").trim();
-    const run = await executeSqlInSandbox({ schema: String(extracted?.schema || ""), query: candidate });
-    const executed = Boolean(run.executed && run.success);
-    const expected = Array.isArray(extracted?.expectedRows) ? extracted.expectedRows : null;
-    const matchesExpected = !expected || JSON.stringify(run.rows) === JSON.stringify(expected);
-    toolEvidence.push({ tool: "sqlite", executed: Boolean(run.executed), success: executed, dialect: "SQLite", output: JSON.stringify(run.rows || run.error || "SQL was not executed"), matchesExpected });
-    if (!executed) toolFailure = true;
-    if (executed && expected && !matchesExpected) {
-      confidence = "LOW";
-      confidenceReason = "SQLite output did not match the expected rows provided in the question.";
-    }
-    if (!executed) {
+    const isSandboxUp = await sandboxHealth();
+    if (!isSandboxUp) {
+      toolEvidence.push({ tool: "sqlite", executed: false, success: false, dialect: "SQLite", output: JSON.stringify("Sandbox service was unreachable"), matchesExpected: false });
+      toolFailure = true;
       confidence = "UNVERIFIED";
-      confidenceReason = run.error || "SQL execution did not complete.";
+      confidenceReason = "Sandbox service was unreachable";
+    } else {
+      const extracted = await aiClient.generateJson({
+        systemPrompt: `${EXTRACTION_SYSTEM} Return {"schema":"CREATE TABLE and INSERT statements only","query":"one SELECT or CTE","expectedRows":[]|null}. Put setup statements only in schema. Never put DDL/DML in query.`,
+        userPrompt: `Extract schema, sample rows and candidate query from the SQL question. Preserve explicitly provided SQL and data. Question:\n${question}`,
+        temperature: 0
+      });
+      const candidate = String(extracted?.query || "").trim();
+      const run = await executeSqlInSandbox({ schema: String(extracted?.schema || ""), query: candidate });
+      const executed = Boolean(run.executed && run.success);
+      const expected = Array.isArray(extracted?.expectedRows) ? extracted.expectedRows : null;
+      const matchesExpected = !expected || JSON.stringify(run.rows) === JSON.stringify(expected);
+      toolEvidence.push({ tool: "sqlite", executed: Boolean(run.executed), success: executed, dialect: "SQLite", output: JSON.stringify(run.rows || run.error || "SQL was not executed"), matchesExpected });
+      if (!executed) toolFailure = true;
+      if (executed && expected && !matchesExpected) {
+        confidence = "LOW";
+        confidenceReason = "SQLite output did not match the expected rows provided in the question.";
+      }
+      if (!executed) {
+        confidence = "UNVERIFIED";
+        confidenceReason = run.error || "SQL execution did not complete.";
+      }
+      if (executed) {
+        const asksForQuery = /\b(which query|write a (?:sql )?query|what query)\b/i.test(question);
+        directAnswer = { option: "", text: asksForQuery ? (candidate || answerText(llmResult?.directAnswer)) : JSON.stringify(run.rows) };
+      }
     }
-    if (executed) directAnswer = { option: "", text: JSON.stringify(run.rows) };
   }
 
   if (toolFailure && confidence !== "UNVERIFIED") {

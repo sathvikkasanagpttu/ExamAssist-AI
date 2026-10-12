@@ -5,6 +5,9 @@
  */
 
 (() => {
+  if (window.__EXAMASSIST_CONTENT_LOADED__) return;
+  window.__EXAMASSIST_CONTENT_LOADED__ = true;
+
   const PANEL_ID = "examai-panel";
   const FLOAT_BTN_ID = "examai-floating-btn";
 
@@ -48,13 +51,23 @@
 
   async function isSiteAllowed() {
     const cfg = await getCfg({
-      enableAllSites: true,
-      allowedSites: ["localhost", "127.0.0.1"]
+      enableAllSites: false,
+      allowedSites: [
+        "localhost",
+        "127.0.0.1",
+        "hackerrank.com",
+        "leetcode.com",
+        "geeksforgeeks.org",
+        "instructure.com"
+      ]
     });
     if (cfg.enableAllSites) return true;
     const host = window.location.hostname.toLowerCase();
     if (host === "localhost" || host === "127.0.0.1") return true;
-    return (cfg.allowedSites || []).some(s => host === s.toLowerCase() || host.endsWith("." + s.toLowerCase()));
+    return (cfg.allowedSites || []).some(s => {
+      const clean = String(s || "").toLowerCase().replace(/^\*\./, "");
+      return host === clean || host.endsWith("." + clean);
+    });
   }
 
   function showInvalidatedBanner() {

@@ -9,7 +9,15 @@ chrome.runtime.onInstalled.addListener(async () => {
     apiBase: "http://localhost:8787",
     autoAnswerOnCopy: false,
     showFloatingButton: true,
-    enableAllSites: true,
+    enableAllSites: false,
+    allowedSites: [
+      "localhost",
+      "127.0.0.1",
+      "hackerrank.com",
+      "leetcode.com",
+      "geeksforgeeks.org",
+      "instructure.com"
+    ],
     autoDetectOptions: true
   });
   const { localUserId } = await chrome.storage.local.get("localUserId");
