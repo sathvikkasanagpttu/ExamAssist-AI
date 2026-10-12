@@ -301,3 +301,50 @@ export const AssessmentResponseSchema = z.object({
   sources: z.array(SourceItemSchema),
   retrievalTimestamp: z.string()
 });
+
+export const ExtractedQuestionPayloadSchema = z.object({
+  question: z.string().default(""),
+  options: z.array(z.string()).default([]),
+  codeSnippet: z.string().optional().default(""),
+  tableData: z.string().optional().default(""),
+  mathFormula: z.string().optional().default(""),
+  source: z.string().optional().default("Generic"),
+  success: z.boolean().optional().default(true)
+});
+
+export const ExtensionMessageSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("RESEARCH_SELECTION"),
+    text: z.string().optional().default("")
+  }),
+  z.object({
+    type: z.literal("TRIGGER_EXAM_ASSIST")
+  }),
+  z.object({
+    type: z.literal("ASK"),
+    question: z.string().min(1)
+  }),
+  z.object({
+    type: z.literal("EXTRACT_CODING_PROBLEM")
+  }),
+  z.object({
+    type: z.literal("OPEN_SIDE_PANEL"),
+    payload: ExtractedQuestionPayloadSchema.optional()
+  })
+]);
+
+export const LegacyActionMessageSchema = z.object({
+  action: z.enum(["EXTRACT_CODING_PROBLEM", "OPEN_SIDE_PANEL"]),
+  payload: z.any().optional()
+});
+
+export const RuntimeMessageEnvelopeSchema = z.union([
+  ExtensionMessageSchema,
+  LegacyActionMessageSchema
+]);
+
+export const StreamingEventSchema = z.object({
+  event: z.enum(["progress", "stage", "partial", "done", "error"]),
+  data: z.record(z.string(), z.any())
+});
+

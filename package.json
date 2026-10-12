@@ -1,0 +1,12 @@
+{
+  "name": "examai-study-assistant-monorepo",
+  "version": "2.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "npm --prefix server run lint && npm --prefix extension run lint",
+    "test": "npm --prefix server test && npm --prefix extension test",
+    "build": "npm --prefix extension run build",
+    "pack": "npm --prefix server run pack"
+  }
+}

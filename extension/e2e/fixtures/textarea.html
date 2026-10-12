@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Plain Textarea Fixture</title>
+</head>
+<body>
+  <main class="coding-question">
+    <h1 class="problem-title">Department Average Salary</h1>
+    <div class="problem-description">
+      Write a SQL query to list each department_id and its average salary for departments with average salary above 60000.
+      Constraints:
+      employees(id, name, department_id, salary)
+      Input:
+      employees table
+      Output:
+      department_id | avg_salary
+    </div>
+    <textarea id="code-editor" class="code-editor" data-language="sql">SELECT department_id, AVG(salary) AS avg_salary FROM employees GROUP BY department_id HAVING AVG(salary) &gt; 60000;</textarea>
+  </main>
+</body>
+</html>
