@@ -14,15 +14,21 @@
     "pack": "node scripts/pack.mjs"
   },
   "dependencies": {
+    "bullmq": "^6.3.13",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^5.1.0",
+    "fast-check": "^4.10.2",
+    "ioredis": "^6.0.0",
     "mammoth": "^1.13.0",
     "mathjs": "^15.2.0",
     "multer": "^2.4.0",
+    "mysql2": "^3.24.5",
     "openai": "^6.6.0",
     "pdfjs-dist": "^4.10.38",
     "pg": "^8.23.1",
+    "tree-sitter-wasms": "^0.1.13",
+    "web-tree-sitter": "^0.20.8",
     "zod": "^4.6.5"
   }
 }

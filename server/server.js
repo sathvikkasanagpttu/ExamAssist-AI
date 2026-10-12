@@ -11,7 +11,12 @@ import {
   CodeDebugRequestSchema,
   CodeHintRequestSchema,
   CodeExplainRequestSchema,
-  CodeComplexityRequestSchema
+  CodeComplexityRequestSchema,
+  CodeRunSamplesRequestSchema,
+  CodeReviewRequestSchema,
+  CodeTranslateRequestSchema,
+  CodeExplainErrorRequestSchema,
+  CodeAstRequestSchema
 } from "./schemas.js";
 import { createRateLimiter } from "./rateLimiter.js";
 import { logger } from "./logger.js";
@@ -22,14 +27,19 @@ import { generateReasonedAnswer } from "./pipeline/reasoningEngine.js";
 import { runVerificationPass } from "./pipeline/verificationPass.js";
 import { defaultAIClient, AIError, AIConfigError } from "./aiClient.js";
 import { getActiveSearchProvider } from "./pipeline/search.js";
-import { sandboxHealth } from "./pipeline/sandboxClient.js";
+import { sandboxHealth, sandboxDetailedHealth } from "./pipeline/sandboxClient.js";
 import {
   analyzeCodingProblem,
   debugUserCode,
   generateCodingHint,
   estimateComplexity,
-  runStaticCodeAnalysis
+  runStaticCodeAnalysis,
+  runUserCodeOnSamples,
+  reviewUserCode,
+  translateSolutionCode,
+  explainCompilerOrRuntimeError
 } from "./pipeline/codingEngine.js";
+import { analyzeAstWithTreeSitter } from "./pipeline/treeSitterAnalyzer.js";
 import {
   scrubSecretsAndPII,
   startSpan,
@@ -126,14 +136,19 @@ function formatZodErrors(error) {
  */
 app.get(["/health", "/api/health"], async (_req, res) => {
   await initializeKnowledgeBase();
+  const detailedSandbox = await sandboxDetailedHealth();
   res.json({
     status: "ok",
     service: "ExamAssist AI Assessment Copilot",
-    version: "2.1.0",
+    version: "2.2.0",
     uptimeSeconds: Math.floor(process.uptime()),
     aiConfigured: defaultAIClient.isConfigured,
     ragEnabled: ragEnabled(),
-    sandboxEnabled: await sandboxHealth(),
+    sandboxEnabled: detailedSandbox.enabled,
+    sandboxEnabledByLanguage: detailedSandbox.sandboxEnabledByLanguage,
+    sandboxRuntime: detailedSandbox.runtime,
+    queueStatus: detailedSandbox.queue,
+    visionEnabled: defaultAIClient.isConfigured,
     searchProvider: getActiveSearchProvider(),
     model: defaultAIClient.model,
     pipelineSteps: [
@@ -662,6 +677,136 @@ app.post("/api/code/complexity", async (req, res) => {
   } catch (err) {
     span.end("error");
     res.status(500).json({ error: "Complexity estimation failed", message: err.message });
+  }
+});
+
+/**
+ * POST /api/code/run-samples - Visible user-triggered sample test runner
+ */
+app.post("/api/code/run-samples", async (req, res) => {
+  const span = startSpan("code.run_samples", { language: req.body?.language });
+  try {
+    const parseResult = CodeRunSamplesRequestSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      span.end("validation_error");
+      return res.status(400).json({ error: "Validation Error", details: formatZodErrors(parseResult.error) });
+    }
+    const payload = parseResult.data;
+    const result = await runUserCodeOnSamples({
+      userCode: scrubSecretsAndPII(payload.userCode).text,
+      language: payload.language,
+      sampleTests: payload.sampleTests,
+      userId: localUserId(req) || "anon"
+    });
+    span.end("ok", { executed: result.executed, passedTests: result.passedTests });
+    res.json(result);
+  } catch (err) {
+    span.end("error");
+    res.status(500).json({ error: "Sample test execution failed", message: err.message });
+  }
+});
+
+/**
+ * POST /api/code/review - Readability, naming, edge cases, complexity & linter review
+ */
+app.post("/api/code/review", async (req, res) => {
+  const span = startSpan("code.review", { language: req.body?.language });
+  try {
+    const parseResult = CodeReviewRequestSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      span.end("validation_error");
+      return res.status(400).json({ error: "Validation Error", details: formatZodErrors(parseResult.error) });
+    }
+    const payload = parseResult.data;
+    const result = await reviewUserCode({
+      question: scrubSecretsAndPII(payload.question).text,
+      code: scrubSecretsAndPII(payload.code).text,
+      language: payload.language
+    });
+    span.end("ok");
+    res.json(result);
+  } catch (err) {
+    span.end("error");
+    if (err instanceof AIError || (err.code && err.code.startsWith("AI_"))) {
+      return res.status(err.status || 503).json({ error: err.message, code: err.code });
+    }
+    res.status(500).json({ error: "Code review failed", message: err.message });
+  }
+});
+
+/**
+ * POST /api/code/translate - Translate solution to another language and re-run sample tests
+ */
+app.post("/api/code/translate", async (req, res) => {
+  const span = startSpan("code.translate", { targetLanguage: req.body?.targetLanguage });
+  try {
+    const parseResult = CodeTranslateRequestSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      span.end("validation_error");
+      return res.status(400).json({ error: "Validation Error", details: formatZodErrors(parseResult.error) });
+    }
+    const payload = parseResult.data;
+    const result = await translateSolutionCode({
+      question: scrubSecretsAndPII(payload.question).text,
+      sourceCode: scrubSecretsAndPII(payload.sourceCode).text,
+      sourceLanguage: payload.sourceLanguage,
+      targetLanguage: payload.targetLanguage,
+      sampleTests: payload.sampleTests,
+      userId: localUserId(req) || "anon"
+    });
+    span.end("ok");
+    res.json(result);
+  } catch (err) {
+    span.end("error");
+    if (err instanceof AIError || (err.code && err.code.startsWith("AI_"))) {
+      return res.status(err.status || 503).json({ error: err.message, code: err.code });
+    }
+    res.status(500).json({ error: "Code translation failed", message: err.message });
+  }
+});
+
+/**
+ * POST /api/code/explain-error - Plain-English explanation of compiler or runtime errors
+ */
+app.post("/api/code/explain-error", async (req, res) => {
+  const span = startSpan("code.explain_error", { language: req.body?.language });
+  try {
+    const parseResult = CodeExplainErrorRequestSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      span.end("validation_error");
+      return res.status(400).json({ error: "Validation Error", details: formatZodErrors(parseResult.error) });
+    }
+    const payload = parseResult.data;
+    const result = await explainCompilerOrRuntimeError({
+      code: scrubSecretsAndPII(payload.code).text,
+      language: payload.language,
+      errorOutput: scrubSecretsAndPII(payload.errorOutput).text
+    });
+    span.end("ok");
+    res.json(result);
+  } catch (err) {
+    span.end("error");
+    if (err instanceof AIError || (err.code && err.code.startsWith("AI_"))) {
+      return res.status(err.status || 503).json({ error: err.message, code: err.code });
+    }
+    res.status(500).json({ error: "Error explanation failed", message: err.message });
+  }
+});
+
+/**
+ * POST /api/code/ast - Direct Tree-sitter WASM AST inspection
+ */
+app.post("/api/code/ast", async (req, res) => {
+  try {
+    const parseResult = CodeAstRequestSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({ error: "Validation Error", details: formatZodErrors(parseResult.error) });
+    }
+    const { code, language } = parseResult.data;
+    const ast = await analyzeAstWithTreeSitter(code, language);
+    res.json(ast);
+  } catch (err) {
+    res.status(500).json({ error: "AST analysis failed", message: err.message });
   }
 });
 

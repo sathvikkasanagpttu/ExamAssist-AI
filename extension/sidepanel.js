@@ -6129,6 +6129,32 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     measureEmpirical: boolean().optional().default(true)
   });
   object({
+    userCode: string().min(1).max(64e3),
+    language: string().max(40).optional().default("python"),
+    sampleTests: array(SampleTestCaseSchema).max(20).optional().default([])
+  });
+  object({
+    question: string().max(5e4).optional().default(""),
+    code: string().min(1).max(64e3),
+    language: string().max(40).optional().default("python")
+  });
+  object({
+    question: string().max(5e4).optional().default(""),
+    sourceCode: string().min(1).max(64e3),
+    sourceLanguage: string().max(40).optional().default("python"),
+    targetLanguage: string().min(1).max(40),
+    sampleTests: array(SampleTestCaseSchema).max(20).optional().default([])
+  });
+  object({
+    code: string().max(64e3).optional().default(""),
+    language: string().max(40).optional().default("python"),
+    errorOutput: string().min(1).max(32e3)
+  });
+  object({
+    code: string().min(1).max(64e3),
+    language: string().max(40).optional().default("")
+  });
+  object({
     question: string().min(3).max(25e3),
     options: array(any()).optional().default([])
   });
@@ -6361,13 +6387,44 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     }
     return data;
   }
+  function formatCodeWithLineNumbers(code) {
+    const lines = String(code || "").split(/\r?\n/);
+    return lines.map((line, idx) => `${String(idx + 1).padStart(3, " ")} | ${line}`).join("\n");
+  }
+  function escapeHtml(raw) {
+    return String(raw || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function renderPerTestTable(runs) {
+    if (!Array.isArray(runs) || runs.length === 0) return "";
+    const rowsHtml = runs.map((r, idx) => {
+      const actual = r.stdout ?? r.actualOutput ?? "";
+      const status = !r.executed ? "⚠️ Not Run" : r.passed ? "✅ PASS" : "❌ FAIL";
+      return `<tr>
+        <td>#${idx + 1}</td>
+        <td>${escapeHtml(r.stdin || "(empty)")}</td>
+        <td>${escapeHtml(r.expectedOutput || "(any)")}</td>
+        <td>${escapeHtml(actual)}</td>
+        <td>${escapeHtml(r.diff || "-")}</td>
+        <td>${r.runtimeMs ?? 0}ms</td>
+        <td>${r.memoryKb ?? 0}KB</td>
+        <td>${status}</td>
+      </tr>`;
+    }).join("");
+    return `<table class="test-table">
+    <thead>
+      <tr><th>#</th><th>Stdin</th><th>Expected</th><th>Stdout</th><th>Diff</th><th>Time</th><th>Mem</th><th>Result</th></tr>
+    </thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>`;
+  }
   (function initSidePanel() {
-    var _a2, _b, _c, _d, _e, _f, _g, _h;
+    var _a2, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
     const DB_NAME = "ExamAssistLocalHistoryDB";
     const STORE_NAME = "problem_history";
     let currentAnalysis = null;
     let authorizedSolutionRevealed = false;
     let activeAnalyzeController = null;
+    let extractedSamples = [];
     function openHistoryDB() {
       return new Promise((resolve, reject) => {
         if (typeof indexedDB === "undefined") return resolve(null);
@@ -6434,7 +6491,8 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
         if (gateEl) gateEl.style.display = "none";
         if (contentEl) contentEl.style.display = "block";
         if (codeEl && ((_b2 = currentAnalysis == null ? void 0 : currentAnalysis.solution) == null ? void 0 : _b2.code)) {
-          codeEl.textContent = currentAnalysis.solution.code;
+          codeEl.textContent = formatCodeWithLineNumbers(currentAnalysis.solution.code);
+          codeEl.setAttribute("data-raw-code", currentAnalysis.solution.code);
         }
       }
     }
@@ -6486,8 +6544,9 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     });
     (_c = document.getElementById("sp-copy-sol")) == null ? void 0 : _c.addEventListener("click", () => {
       var _a3;
-      const code = ((_a3 = document.getElementById("sp-solution-code")) == null ? void 0 : _a3.textContent) || "";
-      navigator.clipboard.writeText(code).then(() => {
+      const codeEl = document.getElementById("sp-solution-code");
+      const rawCode = (codeEl == null ? void 0 : codeEl.getAttribute("data-raw-code")) || ((_a3 = currentAnalysis == null ? void 0 : currentAnalysis.solution) == null ? void 0 : _a3.code) || (codeEl == null ? void 0 : codeEl.textContent) || "";
+      navigator.clipboard.writeText(rawCode).then(() => {
         const btn = document.getElementById("sp-copy-sol");
         if (btn) {
           btn.textContent = "✓ Copied";
@@ -6513,6 +6572,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
           if (res.starterCode && cEl) cEl.value = res.starterCode;
           if (res.language && lEl) lEl.value = res.language;
           if (res.failingOutput && fEl) fEl.value = res.failingOutput;
+          if (Array.isArray(res.sampleTests)) extractedSamples = res.sampleTests;
           if (sEl) sEl.textContent = `Extracted from ${res.platform} (${((_a3 = res.editor) == null ? void 0 : _a3.adapter) || "page"}).`;
         }
       });
@@ -6520,8 +6580,136 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     (_e = document.getElementById("sp-cancel-analyze")) == null ? void 0 : _e.addEventListener("click", () => {
       activeAnalyzeController == null ? void 0 : activeAnalyzeController.abort();
     });
-    (_f = document.getElementById("sp-run-analyze")) == null ? void 0 : _f.addEventListener("click", async () => {
-      var _a3, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i, _j, _k, _l, _m, _n, _o, _p, _q;
+    (_f = document.getElementById("sp-run-samples")) == null ? void 0 : _f.addEventListener("click", async () => {
+      var _a3, _b2;
+      const userCode = ((_a3 = document.getElementById("sp-code")) == null ? void 0 : _a3.value.trim()) || "";
+      const language = ((_b2 = document.getElementById("sp-language")) == null ? void 0 : _b2.value) || "python";
+      const statusEl = document.getElementById("sp-status");
+      if (!userCode) {
+        if (statusEl) statusEl.textContent = "Enter or extract your code first to run on sample tests.";
+        return;
+      }
+      if (statusEl) statusEl.textContent = "Running your code on sample tests in sandbox...";
+      try {
+        const apiBase = await getApiBaseUrl();
+        const res = await fetch(`${apiBase}/api/code/run-samples`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userCode, language, sampleTests: extractedSamples })
+        });
+        const data = await res.json();
+        const tableContainer = document.getElementById("sp-tests-table-container");
+        const testsOut = document.getElementById("sp-tests-output");
+        if (tableContainer) tableContainer.innerHTML = renderPerTestTable(data.results || []);
+        if (testsOut) testsOut.textContent = JSON.stringify(data, null, 2);
+        if (statusEl) {
+          statusEl.textContent = data.executed ? data.badge || `Passed ${data.passedTests}/${data.totalTests} sample tests.` : `Not executed: ${data.error || "Sandbox unavailable"}`;
+        }
+      } catch (err) {
+        if (statusEl) statusEl.textContent = `Run samples error: ${err.message}`;
+      }
+    });
+    (_g = document.getElementById("sp-run-review")) == null ? void 0 : _g.addEventListener("click", async () => {
+      var _a3, _b2, _c2;
+      const question = ((_a3 = document.getElementById("sp-question")) == null ? void 0 : _a3.value.trim()) || "";
+      const code = ((_b2 = document.getElementById("sp-code")) == null ? void 0 : _b2.value.trim()) || "";
+      const language = ((_c2 = document.getElementById("sp-language")) == null ? void 0 : _c2.value) || "python";
+      const statusEl = document.getElementById("sp-status");
+      if (!code) {
+        if (statusEl) statusEl.textContent = "Enter or extract your code first to run a code review.";
+        return;
+      }
+      if (statusEl) statusEl.textContent = "Running AST & linter code review...";
+      try {
+        const apiBase = await getApiBaseUrl();
+        const res = await fetch(`${apiBase}/api/code/review`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question, code, language })
+        });
+        const data = await res.json();
+        const solExplEl = document.getElementById("sp-solution-expl");
+        if (solExplEl) {
+          solExplEl.textContent = `Readability Score: ${data.readabilityScore}/100
+Readability: ${data.readabilityFeedback}
+Naming: ${data.namingFeedback}
+Complexity: ${data.complexityFeedback}
+Edge Cases: ${(data.edgeCases || []).join(", ")}`;
+        }
+        if (statusEl) statusEl.textContent = `Code review complete (Readability ${data.readabilityScore}/100).`;
+      } catch (err) {
+        if (statusEl) statusEl.textContent = `Code review error: ${err.message}`;
+      }
+    });
+    (_h = document.getElementById("sp-translate-btn")) == null ? void 0 : _h.addEventListener("click", async () => {
+      var _a3, _b2, _c2, _d2, _e2, _f2, _g2;
+      const question = ((_a3 = document.getElementById("sp-question")) == null ? void 0 : _a3.value.trim()) || "";
+      const sourceCode = ((_b2 = currentAnalysis == null ? void 0 : currentAnalysis.solution) == null ? void 0 : _b2.code) || ((_c2 = document.getElementById("sp-code")) == null ? void 0 : _c2.value.trim()) || "";
+      const sourceLanguage = (currentAnalysis == null ? void 0 : currentAnalysis.language) || ((_d2 = document.getElementById("sp-language")) == null ? void 0 : _d2.value) || "python";
+      const targetLanguage = ((_e2 = document.getElementById("sp-translate-target")) == null ? void 0 : _e2.value) || "java";
+      const solCodeEl = document.getElementById("sp-solution-code");
+      if (!sourceCode) return;
+      if (solCodeEl) solCodeEl.textContent = `Translating from ${sourceLanguage} to ${targetLanguage} and re-testing...`;
+      try {
+        const apiBase = await getApiBaseUrl();
+        const res = await fetch(`${apiBase}/api/code/translate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            question,
+            sourceCode,
+            sourceLanguage,
+            targetLanguage,
+            sampleTests: extractedSamples
+          })
+        });
+        const data = await res.json();
+        if (solCodeEl && data.translatedCode) {
+          solCodeEl.textContent = formatCodeWithLineNumbers(data.translatedCode);
+          solCodeEl.setAttribute("data-raw-code", data.translatedCode);
+        }
+        const badgeContainer = document.getElementById("sp-verified-badge");
+        if (badgeContainer) {
+          if (((_f2 = data.verification) == null ? void 0 : _f2.sandboxExecuted) && ((_g2 = data.verification) == null ? void 0 : _g2.badge)) {
+            badgeContainer.innerHTML = `<span class="badge verified">✓ ${escapeHtml(data.verification.badge)}</span>`;
+          } else {
+            badgeContainer.innerHTML = `<span class="badge unverified">⚠️ Translated (${escapeHtml(targetLanguage)}) — Not executed in sandbox</span>`;
+          }
+        }
+      } catch (err) {
+        if (solCodeEl) solCodeEl.textContent = `Translation error: ${err.message}`;
+      }
+    });
+    (_i = document.getElementById("sp-explain-error")) == null ? void 0 : _i.addEventListener("click", async () => {
+      var _a3, _b2, _c2;
+      const code = ((_a3 = document.getElementById("sp-code")) == null ? void 0 : _a3.value.trim()) || "";
+      const errorOutput = ((_b2 = document.getElementById("sp-failing-output")) == null ? void 0 : _b2.value.trim()) || "";
+      const language = ((_c2 = document.getElementById("sp-language")) == null ? void 0 : _c2.value) || "python";
+      const out = document.getElementById("sp-debug-output");
+      if (!out) return;
+      if (!errorOutput) {
+        out.textContent = "Paste a compiler or runtime error in the box above first.";
+        return;
+      }
+      out.textContent = "Translating compiler/runtime error into plain English...";
+      try {
+        const apiBase = await getApiBaseUrl();
+        const res = await fetch(`${apiBase}/api/code/explain-error`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code, language, errorOutput })
+        });
+        const data = await res.json();
+        out.textContent = `Category: ${data.failureCategory} (Line: ${data.lineNumber ?? "N/A"})
+Plain-English Summary: ${data.plainEnglishSummary}
+Why It Happened: ${data.whyItHappened}
+How to Fix: ${data.howToFix}`;
+      } catch (err) {
+        out.textContent = `Error explanation failed: ${err.message}`;
+      }
+    });
+    (_j = document.getElementById("sp-run-analyze")) == null ? void 0 : _j.addEventListener("click", async () => {
+      var _a3, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m, _n, _o, _p, _q, _r, _s, _t;
       const question = ((_a3 = document.getElementById("sp-question")) == null ? void 0 : _a3.value.trim()) || "";
       const userCode = ((_b2 = document.getElementById("sp-code")) == null ? void 0 : _b2.value) || "";
       const language = ((_c2 = document.getElementById("sp-language")) == null ? void 0 : _c2.value) || "python";
@@ -6551,7 +6739,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
             constraints: "",
             inputFormat: "",
             outputFormat: "",
-            sampleTests: [],
+            sampleTests: extractedSamples,
             failingOutput: "",
             options: [],
             sqlSchema: "",
@@ -6567,12 +6755,21 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
         if (hintOut) {
           hintOut.textContent = ((_f2 = data.hints) == null ? void 0 : _f2.level1) || "Click Level 1 to request a conceptual hint.";
         }
+        const tagsEl = document.getElementById("sp-concept-tags");
+        if (tagsEl) {
+          tagsEl.innerHTML = (data.conceptTags || []).map((t) => `<span class="tag-pill">${escapeHtml(t)}</span>`).join("");
+        }
+        const simEl = document.getElementById("sp-similar-problems");
+        if (simEl) {
+          const sims = data.similarProblems || [];
+          simEl.innerHTML = sims.length > 0 ? `<strong>Similar Practice Problems:</strong> ` + sims.map((s) => `${escapeHtml(s.title)} (${escapeHtml(s.language)}, ${escapeHtml(s.difficulty)})`).join(" • ") : "";
+        }
         const badgeContainer = document.getElementById("sp-verified-badge");
         if (badgeContainer) {
           if (((_g2 = data.verification) == null ? void 0 : _g2.sandboxExecuted) && ((_h2 = data.verification) == null ? void 0 : _h2.badge)) {
-            badgeContainer.innerHTML = `<span class="badge verified">✓ ${data.verification.badge}</span>`;
+            badgeContainer.innerHTML = `<span class="badge verified">✓ ${escapeHtml(data.verification.badge)}</span>`;
           } else {
-            badgeContainer.innerHTML = `<span class="badge unverified">⚠️ Not executed in sandbox (${data.confidence})</span>`;
+            badgeContainer.innerHTML = `<span class="badge unverified">⚠️ Not executed in sandbox (${escapeHtml(data.confidence || "UNVERIFIED")})</span>`;
           }
         }
         const solCodeEl = document.getElementById("sp-solution-code");
@@ -6580,25 +6777,32 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
           if (mode === "Authorized Assessment Mode" && !authorizedSolutionRevealed) {
             solCodeEl.textContent = "";
           } else {
-            solCodeEl.textContent = ((_i = data.solution) == null ? void 0 : _i.code) || "// No code generated";
+            const rawCode = ((_i2 = data.solution) == null ? void 0 : _i2.code) || "// No code generated";
+            solCodeEl.textContent = formatCodeWithLineNumbers(rawCode);
+            solCodeEl.setAttribute("data-raw-code", rawCode);
           }
         }
         const solExplEl = document.getElementById("sp-solution-expl");
         if (solExplEl) {
-          solExplEl.textContent = `${((_j = data.solution) == null ? void 0 : _j.explanation) || ""}
+          solExplEl.textContent = `${((_j2 = data.solution) == null ? void 0 : _j2.explanation) || ""}
 
-Why alternatives are slower: ${((_k = data.solution) == null ? void 0 : _k.alternativesComparison) || ""}`;
+Ranking & Trade-offs: ${((_k2 = data.ranking) == null ? void 0 : _k2.winnerReason) || ((_l2 = data.solution) == null ? void 0 : _l2.alternativesComparison) || ""}`;
+        }
+        const tableContainer = document.getElementById("sp-tests-table-container");
+        if (tableContainer) {
+          tableContainer.innerHTML = renderPerTestTable(((_m = data.verification) == null ? void 0 : _m.runs) || []);
         }
         const testsOut = document.getElementById("sp-tests-output");
         if (testsOut) {
           testsOut.textContent = JSON.stringify(
             {
-              sandboxExecuted: (_l = data.verification) == null ? void 0 : _l.sandboxExecuted,
-              passedTests: (_m = data.verification) == null ? void 0 : _m.passedTests,
-              totalTests: (_n = data.verification) == null ? void 0 : _n.totalTests,
-              repairAttempts: (_o = data.verification) == null ? void 0 : _o.repairAttempts,
-              differentialMatched: (_p = data.verification) == null ? void 0 : _p.differentialMatched,
-              runs: ((_q = data.verification) == null ? void 0 : _q.runs) || []
+              sandboxExecuted: (_n = data.verification) == null ? void 0 : _n.sandboxExecuted,
+              passedTests: (_o = data.verification) == null ? void 0 : _o.passedTests,
+              totalTests: (_p = data.verification) == null ? void 0 : _p.totalTests,
+              testStrength: (_q = data.verification) == null ? void 0 : _q.testStrength,
+              repairAttempts: (_r = data.verification) == null ? void 0 : _r.repairAttempts,
+              differentialMatched: (_s = data.verification) == null ? void 0 : _s.differentialMatched,
+              runs: ((_t = data.verification) == null ? void 0 : _t.runs) || []
             },
             null,
             2
@@ -6620,7 +6824,7 @@ Why alternatives are slower: ${((_k = data.solution) == null ? void 0 : _k.alter
         if (cancelBtn) cancelBtn.style.display = "none";
       }
     });
-    (_g = document.getElementById("sp-run-debug")) == null ? void 0 : _g.addEventListener("click", async () => {
+    (_k = document.getElementById("sp-run-debug")) == null ? void 0 : _k.addEventListener("click", async () => {
       var _a3, _b2, _c2, _d2, _e2;
       const question = ((_a3 = document.getElementById("sp-question")) == null ? void 0 : _a3.value.trim()) || "Debug submitted code";
       const userCode = ((_b2 = document.getElementById("sp-code")) == null ? void 0 : _b2.value.trim()) || "";
@@ -6628,12 +6832,13 @@ Why alternatives are slower: ${((_k = data.solution) == null ? void 0 : _k.alter
       const language = ((_d2 = document.getElementById("sp-language")) == null ? void 0 : _d2.value) || "python";
       const explanationLevel = ((_e2 = document.getElementById("sp-expl-level")) == null ? void 0 : _e2.value) || "Technical";
       const out = document.getElementById("sp-debug-output");
+      const sbsEl = document.getElementById("sp-side-by-side-diff");
       if (!out) return;
       if (!userCode) {
         out.textContent = "Paste or extract your code in the Problem tab first.";
         return;
       }
-      out.textContent = "Analyzing bug & generating minimal diff...";
+      out.textContent = "Analyzing bug & generating side-by-side diff...";
       try {
         const apiBase = await getApiBaseUrl();
         const data = await requestCodingDebug(
@@ -6643,22 +6848,30 @@ Why alternatives are slower: ${((_k = data.solution) == null ? void 0 : _k.alter
             failingOutput,
             language,
             explanationLevel,
-            sampleTests: []
+            sampleTests: extractedSamples
           },
           apiBase
         );
+        if (sbsEl && Array.isArray(data.sideBySideDiff)) {
+          sbsEl.innerHTML = data.sideBySideDiff.map((row) => {
+            const leftCls = row.status === "removed" || row.status === "modified" ? "diff-removed" : "diff-unchanged";
+            const rightCls = row.status === "added" || row.status === "modified" ? "diff-added" : "diff-unchanged";
+            return `<div class="diff-cell ${leftCls}">${row.lineNumber}: ${escapeHtml(row.left ?? "")}</div>
+                    <div class="diff-cell ${rightCls}">${row.lineNumber}: ${escapeHtml(row.right ?? "")}</div>`;
+          }).join("");
+        }
         out.textContent = `Bug Line: ${data.bugLine ?? "N/A"}
 Summary: ${data.bugSummary}
 Root Cause: ${data.rootCause}
 
---- Minimal Diff (Read-Only, Copy to Apply) ---
+--- Unified Diff (Read-Only, Copy to Apply) ---
 ${data.minimalDiff}`;
       } catch (err) {
         const e = err;
         out.textContent = `Debug error: ${e.message}`;
       }
     });
-    (_h = document.getElementById("sp-clear-history")) == null ? void 0 : _h.addEventListener("click", () => {
+    (_l = document.getElementById("sp-clear-history")) == null ? void 0 : _l.addEventListener("click", () => {
       void clearHistory();
     });
     void updateHistoryCount();

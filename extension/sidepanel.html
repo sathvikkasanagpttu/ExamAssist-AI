@@ -89,6 +89,17 @@
     }
     .badge.verified { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid #10b981; }
     .badge.unverified { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid #f59e0b; }
+    .tag-pill {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: 10.5px;
+      background: rgba(56, 189, 248, 0.14);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      color: #7dd3fc;
+      margin-right: 4px;
+      margin-bottom: 4px;
+    }
     .hint-ladder { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
     .notice-banner {
       background: rgba(245, 158, 11, 0.12);
@@ -100,6 +111,31 @@
       font-size: 11.5px;
     }
     .label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; margin-top: 6px; }
+    table.test-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      margin-top: 6px;
+    }
+    table.test-table th, table.test-table td {
+      border: 1px solid var(--border);
+      padding: 4px 6px;
+      text-align: left;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+    }
+    table.test-table th { background: #1e293b; color: #cbd5e1; }
+    .diff-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 11px;
+      margin-top: 6px;
+    }
+    .diff-cell { padding: 2px 6px; border-radius: 3px; white-space: pre-wrap; word-break: break-all; }
+    .diff-removed { background: rgba(239, 68, 68, 0.18); color: #fca5a5; }
+    .diff-added { background: rgba(16, 185, 129, 0.18); color: #6ee7b7; }
+    .diff-unchanged { background: #050814; color: #94a3b8; }
   </style>
 </head>
 <body>
@@ -132,7 +168,7 @@
     <div class="label">Detected Question / Statement (Editable before sending)</div>
     <textarea id="sp-question" placeholder="Select a coding or academic problem on the page, or paste here..."></textarea>
     <div class="label">Language &amp; Starter / Current Editor Code (Read-Only from Page)</div>
-    <div style="display:flex;gap:6px;margin-top:4px;margin-bottom:4px;">
+    <div style="display:flex;gap:6px;margin-top:4px;margin-bottom:4px;flex-wrap:wrap;">
       <select id="sp-language">
         <option value="python">Python</option>
         <option value="javascript">JavaScript</option>
@@ -143,10 +179,14 @@
       </select>
       <button id="sp-extract-page">🔍 Extract from Active Tab</button>
       <button id="sp-run-analyze" class="primary">🚀 Analyze Problem</button>
+      <button id="sp-run-samples">▶ Run My Code on Samples</button>
+      <button id="sp-run-review">🔎 Code Review</button>
       <button id="sp-cancel-analyze" style="display:none;background:#7f1d1d;border-color:#ef4444;color:#fecaca;">⏹ Cancel</button>
     </div>
     <textarea id="sp-code" placeholder="Optional starter code or your current attempt..."></textarea>
     <div id="sp-status" style="font-size:11.5px;color:#38bdf8;margin-top:4px;">Ready.</div>
+    <div id="sp-concept-tags" style="margin-top:6px;"></div>
+    <div id="sp-similar-problems" style="margin-top:6px;font-size:11.5px;color:#cbd5e1;"></div>
   </div>
 
   <!-- 2. Hints Tab (4-Level Ladder) -->
@@ -169,35 +209,51 @@
     </div>
     <div id="sp-solution-content">
       <div id="sp-verified-badge"></div>
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <span class="label">Read-Only Solution Viewer (Never auto-typed into page)</span>
-        <button id="sp-copy-sol">📋 Copy Code</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">
+        <span class="label">Read-Only Monaco/CodeMirror Viewer (Never auto-typed into page)</span>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <select id="sp-translate-target" title="Translate solution to language">
+            <option value="python">Python</option>
+            <option value="java">Java</option>
+            <option value="cpp">C++</option>
+            <option value="c">C</option>
+            <option value="javascript">JavaScript</option>
+          </select>
+          <button id="sp-translate-btn">🌐 Translate &amp; Re-Test</button>
+          <button id="sp-copy-sol">📋 Copy Code</button>
+        </div>
       </div>
       <pre id="sp-solution-code">// Run analysis to view verified solution</pre>
-      <div class="label">Approach &amp; Why Alternatives Are Slower</div>
-      <div id="sp-solution-expl" style="margin-top:4px;color:#cbd5e1;"></div>
+      <div class="label">Candidate Ranking &amp; Why Winner Was Chosen</div>
+      <div id="sp-solution-expl" style="margin-top:4px;color:#cbd5e1;white-space:pre-wrap;"></div>
     </div>
   </div>
 
   <!-- 4. Tests Tab -->
   <div id="tab-tests" class="tab-pane">
-    <div class="label">Executed Sandbox Tests &amp; Edge Cases</div>
+    <div class="label">Per-Test Sandbox Result Table (Stdout, Expected, Diff, Runtime, Memory, Test Strength)</div>
+    <div id="sp-tests-table-container"></div>
     <pre id="sp-tests-output">No sandbox tests executed yet.</pre>
   </div>
 
   <!-- 5. Complexity Tab -->
   <div id="tab-complexity" class="tab-pane">
-    <div class="label">Static AST Estimate vs Empirical Sandbox Timing</div>
+    <div class="label">Static AST Estimate vs Empirical Log-Log Sandbox Regression</div>
     <pre id="sp-complexity-output">Run analysis to compare static and empirical complexity.</pre>
   </div>
 
   <!-- 6. Debug Tab -->
   <div id="tab-debug" class="tab-pane">
-    <div class="label">Failing Console / Test Output</div>
+    <div class="label">Failing Console / Compiler / Runtime Error Output</div>
     <textarea id="sp-failing-output" placeholder="Paste failing test output or compiler error..."></textarea>
-    <button id="sp-run-debug" class="primary">🛠️ Pinpoint Bug &amp; Generate Minimal Diff</button>
-    <div class="label">Root Cause &amp; Minimal Read-Only Diff</div>
-    <pre id="sp-debug-output">Submit your code and failing output to see the exact bug line and minimal diff.</pre>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <button id="sp-run-debug" class="primary">🛠️ Pinpoint Bug &amp; Side-by-Side Diff</button>
+      <button id="sp-explain-error">💡 Explain Error in Plain English</button>
+    </div>
+    <div class="label">Side-by-Side Diff (User Code vs Suggested Fix)</div>
+    <div id="sp-side-by-side-diff" class="diff-grid"></div>
+    <div class="label">Root Cause &amp; Unified Diff</div>
+    <pre id="sp-debug-output">Submit your code and failing output to see the exact bug line and side-by-side diff.</pre>
   </div>
 
   <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);">

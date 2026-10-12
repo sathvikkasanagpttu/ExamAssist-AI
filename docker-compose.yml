@@ -15,6 +15,32 @@ services:
       retries: 20
     restart: unless-stopped
 
+  redis:
+    image: redis:7-alpine
+    container_name: examassist-redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    expose:
+      - "6379"
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  sql-mysql:
+    image: mysql:8.0
+    container_name: examassist-sql-mysql
+    profiles: ["sql-engines"]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-local-sandbox-only}
+      MYSQL_DATABASE: sandbox_sql
+    expose:
+      - "3306"
+    networks: [backend]
+    restart: unless-stopped
+
   examassist-backend:
     build:
       context: ./server
@@ -24,6 +50,8 @@ services:
     depends_on:
       course-notes-db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     ports:
       - "127.0.0.1:${EXAMASSIST_HOST_PORT:-8787}:8787"
     environment:
@@ -32,6 +60,11 @@ services:
       - NODE_ENV=production
       - RATE_LIMIT_PER_MINUTE=120
       - KB_DATABASE_URL=postgresql://${POSTGRES_USER:-examassist}:${POSTGRES_PASSWORD:-local-dev-only}@course-notes-db:5432/${POSTGRES_DB:-examassist}
+      - REDIS_URL=redis://redis:6379
+      - SQL_POSTGRES_ENABLED=${SQL_POSTGRES_ENABLED:-false}
+      - SQL_MYSQL_ENABLED=${SQL_MYSQL_ENABLED:-false}
+      - SQL_MYSQL_URL=${SQL_MYSQL_URL:-mysql://root:local-sandbox-only@sql-mysql:3306/sandbox_sql}
+      - SANDBOX_RUNTIME=${SANDBOX_RUNTIME:-runc}
       - KB_MAX_UPLOAD_BYTES=${KB_MAX_UPLOAD_BYTES:-10485760}
       - OPENAI_EMBEDDING_MODEL=${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
       - CORS_ALLOWED_ORIGINS=http://localhost:8787,chrome-extension://*
@@ -58,13 +91,15 @@ services:
       context: ./server/sandbox
       dockerfile: Dockerfile
     container_name: examassist-sandbox
+    runtime: ${SANDBOX_RUNTIME:-runc}
     expose:
       - "8790"
     read_only: true
     user: "0:0"
     cap_drop: [ALL]
     cap_add: [SETPCAP, SYS_ADMIN, NET_ADMIN, CHOWN]
-    security_opt: [no-new-privileges:true]
+    security_opt:
+      - no-new-privileges:true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m
     mem_limit: 768m

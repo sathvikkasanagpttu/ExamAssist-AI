@@ -6132,6 +6132,32 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     measureEmpirical: boolean().optional().default(true)
   });
   object({
+    userCode: string().min(1).max(64e3),
+    language: string().max(40).optional().default("python"),
+    sampleTests: array(SampleTestCaseSchema).max(20).optional().default([])
+  });
+  object({
+    question: string().max(5e4).optional().default(""),
+    code: string().min(1).max(64e3),
+    language: string().max(40).optional().default("python")
+  });
+  object({
+    question: string().max(5e4).optional().default(""),
+    sourceCode: string().min(1).max(64e3),
+    sourceLanguage: string().max(40).optional().default("python"),
+    targetLanguage: string().min(1).max(40),
+    sampleTests: array(SampleTestCaseSchema).max(20).optional().default([])
+  });
+  object({
+    code: string().max(64e3).optional().default(""),
+    language: string().max(40).optional().default("python"),
+    errorOutput: string().min(1).max(32e3)
+  });
+  object({
+    code: string().min(1).max(64e3),
+    language: string().max(40).optional().default("")
+  });
+  object({
     question: string().min(3).max(25e3),
     options: array(any()).optional().default([])
   });

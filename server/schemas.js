@@ -170,6 +170,37 @@ export const CodeComplexityRequestSchema = z.object({
   measureEmpirical: z.boolean().optional().default(true)
 });
 
+export const CodeRunSamplesRequestSchema = z.object({
+  userCode: z.string().min(1).max(64000),
+  language: z.string().max(40).optional().default("python"),
+  sampleTests: z.array(SampleTestCaseSchema).max(20).optional().default([])
+});
+
+export const CodeReviewRequestSchema = z.object({
+  question: z.string().max(50000).optional().default(""),
+  code: z.string().min(1).max(64000),
+  language: z.string().max(40).optional().default("python")
+});
+
+export const CodeTranslateRequestSchema = z.object({
+  question: z.string().max(50000).optional().default(""),
+  sourceCode: z.string().min(1).max(64000),
+  sourceLanguage: z.string().max(40).optional().default("python"),
+  targetLanguage: z.string().min(1).max(40),
+  sampleTests: z.array(SampleTestCaseSchema).max(20).optional().default([])
+});
+
+export const CodeExplainErrorRequestSchema = z.object({
+  code: z.string().max(64000).optional().default(""),
+  language: z.string().max(40).optional().default("python"),
+  errorOutput: z.string().min(1).max(32000)
+});
+
+export const CodeAstRequestSchema = z.object({
+  code: z.string().min(1).max(64000),
+  language: z.string().max(40).optional().default("")
+});
+
 export const QuestionClassifyRequestSchema = z.object({
   question: z.string().min(3).max(25000),
   options: z.array(z.any()).optional().default([])
