@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import {
+  APP_VERSION,
   AssessmentAnalyzeRequestSchema,
   QuestionClassifyRequestSchema,
   SearchRequestSchema,
@@ -145,7 +146,7 @@ app.get(["/health", "/api/health"], async (_req, res) => {
   res.json({
     status: "ok",
     service: "ExamAssist AI Assessment Copilot",
-    version: "2.2.0",
+    version: APP_VERSION,
     uptimeSeconds: Math.floor(process.uptime()),
     aiConfigured: defaultAIClient.isConfigured,
     ragEnabled: ragEnabled(),
@@ -243,7 +244,7 @@ app.post("/api/kb/docs-search", async (req, res) => {
  */
 app.get("/api/config", (_req, res) => {
   res.json({
-    version: "2.1.0",
+    version: APP_VERSION,
     supportedQuestionTypes: [
       "MCQ", "MULTI_SELECT", "TRUE_FALSE", "FILL_BLANK",
       "NUMERICAL", "CODING", "DEBUGGING", "SQL", "CONCEPTUAL", "SHORT_ANSWER"

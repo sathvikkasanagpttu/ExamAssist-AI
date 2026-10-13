@@ -60,3 +60,17 @@ test("Phase 0.2: smoke-baseline.json is separate from baseline.json and gate.mjs
   assert.ok(gateCode.includes("smoke-baseline.json"));
   assert.ok(gateCode.includes("never uses smoke baselines for real comparisons") || gateCode.includes("refuses to use a smoke baseline"));
 });
+
+test("Phase 0.6: Monorepo version numbers are consistent across root, server, extension, shared, and manifest", () => {
+  const rootPkg = JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8"));
+  const serverPkg = JSON.parse(readFileSync(path.join(repoRoot, "server", "package.json"), "utf8"));
+  const extPkg = JSON.parse(readFileSync(path.join(repoRoot, "extension", "package.json"), "utf8"));
+  const manifest = JSON.parse(readFileSync(path.join(repoRoot, "extension", "manifest.json"), "utf8"));
+  const sharedPkg = JSON.parse(readFileSync(path.join(repoRoot, "shared", "package.json"), "utf8"));
+
+  assert.equal(rootPkg.version, "2.2.0");
+  assert.equal(serverPkg.version, rootPkg.version);
+  assert.equal(extPkg.version, rootPkg.version);
+  assert.equal(manifest.version, rootPkg.version);
+  assert.equal(sharedPkg.version, rootPkg.version);
+});

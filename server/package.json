@@ -1,6 +1,6 @@
 {
   "name": "examai-study-assistant-server",
-  "version": "1.0.0",
+  "version": "2.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,7 +16,9 @@
     "eval:code": "node eval/code-runner.mjs",
     "eval:code:smoke": "node eval/code-runner.mjs --simulate --limit 12 --ablation 4_plus_diff_property",
     "mcp": "node mcp/server.js",
-    "pack": "node scripts/pack.mjs"
+    "pack": "node scripts/pack.mjs",
+    "version:check": "node ../scripts/sync-versions.mjs --check",
+    "version:sync": "node ../scripts/sync-versions.mjs"
   },
   "dependencies": {
     "bullmq": "^6.3.13",

@@ -43,8 +43,32 @@ export function verifyIgnoreFiles(rootDir = repoRoot) {
   return true;
 }
 
+export function verifyVersionConsistency(rootDir = repoRoot) {
+  const rootPkg = JSON.parse(readFileSync(path.join(rootDir, "package.json"), "utf8"));
+  const serverPkg = JSON.parse(readFileSync(path.join(rootDir, "server", "package.json"), "utf8"));
+  const extPkg = JSON.parse(readFileSync(path.join(rootDir, "extension", "package.json"), "utf8"));
+  const manifest = JSON.parse(readFileSync(path.join(rootDir, "extension", "manifest.json"), "utf8"));
+  const sharedPkg = JSON.parse(readFileSync(path.join(rootDir, "shared", "package.json"), "utf8"));
+
+  const target = rootPkg.version;
+  const versions = {
+    server: serverPkg.version,
+    extension: extPkg.version,
+    manifest: manifest.version,
+    shared: sharedPkg.version
+  };
+
+  for (const [key, ver] of Object.entries(versions)) {
+    if (ver !== target) {
+      throw new Error(`Version mismatch in ${key}: ${ver} does not match root version ${target}`);
+    }
+  }
+  return true;
+}
+
 export function buildAndAuditCleanZip(targetZip = zipPath, rootDir = repoRoot) {
   verifyIgnoreFiles(rootDir);
+  verifyVersionConsistency(rootDir);
 
   if (existsSync(targetZip)) {
     rmSync(targetZip, { force: true });
@@ -104,7 +128,8 @@ export function buildAndAuditCleanZip(targetZip = zipPath, rootDir = repoRoot) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   if (dryCheckOnly) {
     verifyIgnoreFiles(repoRoot);
-    console.log("[pack] .gitignore and .dockerignore checks passed.");
+    verifyVersionConsistency(repoRoot);
+    console.log("[pack] .gitignore, .dockerignore, and version consistency checks passed.");
   } else {
     const result = buildAndAuditCleanZip(zipPath, repoRoot);
     console.log(`[pack] Built clean archive: ${result.zipPath} (${result.fileCount} files verified clean).`);

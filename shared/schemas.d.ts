@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  APP_VERSION,
   QuestionTypeEnum,
   CodingQuestionSubTypeEnum,
   DifficultyEnum,
@@ -52,6 +53,7 @@ export type RuntimeMessageEnvelope = z.infer<typeof RuntimeMessageEnvelopeSchema
 export type StreamingEvent = z.infer<typeof StreamingEventSchema>;
 
 export {
+  APP_VERSION,
   QuestionTypeEnum,
   CodingQuestionSubTypeEnum,
   DifficultyEnum,

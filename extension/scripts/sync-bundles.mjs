@@ -54,6 +54,18 @@ for (const entry of entries) {
   fs.rmSync(path.join(distDir, entry.name), { recursive: true, force: true });
 }
 
+// Ensure manifest.json version is synced with extension package.json
+const extPkg = JSON.parse(fs.readFileSync(path.join(rootDir, "package.json"), "utf8"));
+const manifestPath = path.join(rootDir, "manifest.json");
+if (fs.existsSync(manifestPath)) {
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  if (manifest.version !== extPkg.version) {
+    manifest.version = extPkg.version;
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");
+    console.log(`[build] Synced manifest.json version to ${extPkg.version}`);
+  }
+}
+
 for (const staticFile of ["manifest.json", "popup.html", "options.html", "sidepanel.html", "content.css"]) {
   const src = path.join(rootDir, staticFile);
   if (fs.existsSync(src)) {

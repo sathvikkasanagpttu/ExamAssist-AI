@@ -67,7 +67,18 @@ test("API: GET /api/health returns 200 and system status", async () => {
   const res = await dispatchRequest(app, { method: "GET", url: "/api/health" });
   assert.equal(res.status, 200);
   assert.equal(res.body.status, "ok");
+  assert.equal(res.body.version, "2.2.0");
   assert.ok(res.body.service.includes("ExamAssist"));
+});
+
+test("API: GET /api/config and /api/health report synchronized version 2.2.0", async () => {
+  const healthRes = await dispatchRequest(app, { method: "GET", url: "/api/health" });
+  const configRes = await dispatchRequest(app, { method: "GET", url: "/api/config" });
+  assert.equal(healthRes.status, 200);
+  assert.equal(configRes.status, 200);
+  assert.equal(healthRes.body.version, "2.2.0");
+  assert.equal(configRes.body.version, "2.2.0");
+  assert.equal(healthRes.body.version, configRes.body.version);
 });
 
 test("API: streaming analysis emits ordered progress and a terminal done event", async () => {
@@ -88,6 +99,7 @@ test("API: streaming analysis emits ordered progress and a terminal done event",
 test("API: GET /api/config returns supported question types and modes", async () => {
   const res = await dispatchRequest(app, { method: "GET", url: "/api/config" });
   assert.equal(res.status, 200);
+  assert.equal(res.body.version, "2.2.0");
   assert.ok(Array.isArray(res.body.supportedQuestionTypes));
   assert.ok(res.body.supportedQuestionTypes.includes("MCQ"));
   assert.ok(res.body.supportedQuestionTypes.includes("SQL"));
