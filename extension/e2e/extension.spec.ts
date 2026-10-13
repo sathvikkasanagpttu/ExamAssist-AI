@@ -170,7 +170,7 @@ async function injectExtensionIntoFixture(page: import("@playwright/test").Page)
   await page.addScriptTag({ path: contentBundlePath });
 }
 
-test("1. Monaco fixture: extracts problem & code read-only, streams inside Shadow DOM, and supports lazy 4-level hint ladder", async ({
+test("1. Monaco fixture: extracts problem & code read-only and immediately streams the answer inside Shadow DOM", async ({
   page
 }) => {
   streamHoldMode = false;
@@ -188,7 +188,7 @@ test("1. Monaco fixture: extracts problem & code read-only, streams inside Shado
   expect(extracted.editor?.adapter).toBe("MonacoAdapter");
   expect(extracted.starterCode).toContain("def two_sum(numbers, target):");
 
-  // Open Shadow DOM panel and stream analysis
+  // Open Shadow DOM panel and stream analysis immediately
   await page.evaluate((prob) => {
     window.__EXAMASSIST_TEST_API__!.openInPageOverlayAndAnalyze({
       success: true,
@@ -204,14 +204,8 @@ test("1. Monaco fixture: extracts problem & code read-only, streams inside Shado
   const shadowHost = page.locator("#examai-shadow-host");
   await expect(shadowHost).toBeAttached();
   await expect(page.locator("#examai-direct-answer")).toContainText("B. O(log n)");
-
-  // Verify hint ladder laziness: Level 4 is NOT in the DOM before clicking Level 4
-  await page.locator('[data-hint-level="1"]').click();
-  await expect(page.locator("#examai-hint-output")).toContainText("Level 1 Conceptual Nudge");
-  await expect(page.locator("#examai-hint-output")).not.toContainText("Level 4 Full Solution");
-
-  await page.locator('[data-hint-level="4"]').click();
-  await expect(page.locator("#examai-hint-output")).toContainText("Level 4 Full Solution");
+  await expect(page.locator("#examai-explanation")).toContainText("An AVL tree maintains O(log n) height");
+  await expect(page.locator('[data-hint-level="4"]')).toHaveCount(0);
 
   // Verify host Monaco editor DOM was never modified
   const monacoAfter = await page.locator("#host-monaco").innerHTML();

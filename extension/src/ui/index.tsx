@@ -11,13 +11,12 @@
 import { render } from "preact";
 import { useState, useEffect } from "preact/hooks";
 import type { ExtractedAssessmentQuestion } from "../extractors";
-import { extractCodingProblem } from "../extractors";
+import { extractCodingProblem, ExtractionManager, parseQuestionAndOptions } from "../extractors";
 import {
   getApiBaseUrl,
   getStorageConfig,
   setStorageConfig,
   streamAssessmentAnalysis,
-  requestCodingHint,
   captureAndCropVisibleRegion,
   requestVisionExtraction,
   type VisionExtractResponse
@@ -72,20 +71,16 @@ function InPageOverlayApp(props: OverlayProps) {
   const [questionText, setQuestionText] = useState<string>(props.initialCaptured?.question || "");
   const [optionsText, setOptionsText] = useState<string>((props.initialCaptured?.options || []).join("\n"));
   const [codeSnippet, setCodeSnippet] = useState<string>(props.initialCaptured?.codeSnippet || "");
-  const [language, setLanguage] = useState<string>("python");
+  const [, setLanguage] = useState<string>("python");
 
   const [streaming, setStreaming] = useState<boolean>(false);
   const [streamStage, setStreamStage] = useState<string>("");
   const [abortCtrl, setAbortCtrl] = useState<AbortController | null>(null);
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
   const [errorState, setErrorState] = useState<{ code?: string; message: string } | null>(null);
-
-  const [hintsByLevel, setHintsByLevel] = useState<Record<number, string>>({});
-  const [activeHintLevel, setActiveHintLevel] = useState<number | null>(null);
-  const [hintLoading, setHintLoading] = useState<boolean>(false);
   const [copyStatus, setCopyStatus] = useState<string>("📋 Copy Answer");
 
-  // Phase 3: User-triggered Vision + OCR states
+  // User-triggered Vision + OCR states
   const [selectingRegion, setSelectingRegion] = useState<boolean>(false);
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [dragCurrent, setDragCurrent] = useState<{ x: number; y: number } | null>(null);
@@ -96,7 +91,6 @@ function InPageOverlayApp(props: OverlayProps) {
   } | null>(null);
   const [visionLoading, setVisionLoading] = useState<boolean>(false);
   const [visionMeta, setVisionMeta] = useState<VisionExtractResponse | null>(null);
-  const [lowOcrConfirmed, setLowOcrConfirmed] = useState<boolean>(true);
 
   useEffect(() => {
     getStorageConfig({ theme: "dark", mode: "Practice Mode" }).then((cfg) => {
@@ -126,21 +120,17 @@ function InPageOverlayApp(props: OverlayProps) {
   }, [props.autoRunToken, props.initialCaptured]);
 
   async function runAnalyze(qOverride?: string, optsOverride?: string[], codeOverride?: string) {
-    if (visionMeta?.requiresUserConfirmation && !lowOcrConfirmed) {
-      setErrorState({
-        code: "LOW_OCR_CONFIDENCE_UNCONFIRMED",
-        message: "Low OCR confidence detected. Please review the extracted text and click 'Confirm Extracted Text' before analyzing."
-      });
-      return;
-    }
-    const q = (qOverride !== undefined ? qOverride : questionText).trim();
-    const opts =
+    const rawInput = (qOverride !== undefined ? qOverride : questionText).trim();
+    const parsedInline = parseQuestionAndOptions(rawInput);
+    const manualOpts =
       optsOverride !== undefined
         ? optsOverride
         : optionsText
             .split(/\r?\n/)
             .map((l) => l.trim())
             .filter(Boolean);
+    const opts = manualOpts.length > 0 ? manualOpts : parsedInline.options;
+    const q = (manualOpts.length > 0 ? rawInput : parsedInline.question || rawInput).trim();
     const code = codeOverride !== undefined ? codeOverride : codeSnippet;
 
     if (q.length < 3) {
@@ -152,11 +142,9 @@ function InPageOverlayApp(props: OverlayProps) {
     const controller = new AbortController();
     setAbortCtrl(controller);
     setStreaming(true);
-    setStreamStage("Connecting to ExamAssist AI...");
+    setStreamStage("Generating answer...");
     setErrorState(null);
     setResult(null);
-    setHintsByLevel({});
-    setActiveHintLevel(null);
     setAuthorizedRevealed(false);
 
     try {
@@ -205,42 +193,98 @@ function InPageOverlayApp(props: OverlayProps) {
     abortCtrl?.abort();
   }
 
-  async function handleRequestHint(level: number) {
-    const q = questionText.trim();
-    if (q.length < 3) {
-      setErrorState({ code: "EMPTY_QUESTION", message: "Enter or extract a problem statement before requesting a hint." });
-      return;
-    }
-    setActiveHintLevel(level);
-    if (hintsByLevel[level]) return;
+  function handleExtractPageCoding() {
+    const extracted = extractCodingProblem(document);
+    const manager = new ExtractionManager();
+    const pageExtracted = manager.extract(document.activeElement, document);
 
-    setHintLoading(true);
-    try {
-      const apiBase = await getApiBaseUrl();
-      const res = await requestCodingHint(
-        {
-          question: q,
-          userCode: codeSnippet,
-          language,
-          level,
-          explanationLevel: "Technical"
-        },
-        apiBase
-      );
-      setHintsByLevel((prev) => ({ ...prev, [level]: res.activeHint }));
-    } catch (err) {
-      const e = err as Error;
-      setHintsByLevel((prev) => ({ ...prev, [level]: `Hint error: ${e.message}` }));
-    } finally {
-      setHintLoading(false);
+    const nextQ = extracted.statement || pageExtracted?.question || "";
+    const nextOpts = pageExtracted?.options || [];
+    const nextCode = extracted.starterCode || pageExtracted?.codeSnippet || "";
+
+    if (nextQ) setQuestionText(nextQ);
+    if (nextOpts.length > 0) setOptionsText(nextOpts.join("\n"));
+    if (nextCode) setCodeSnippet(nextCode);
+    if (extracted.language) setLanguage(extracted.language);
+
+    if (nextQ.trim().length >= 3) {
+      void runAnalyze(nextQ, nextOpts, nextCode);
     }
   }
 
-  function handleExtractPageCoding() {
-    const extracted = extractCodingProblem(document);
-    if (extracted.statement) setQuestionText(extracted.statement);
-    if (extracted.starterCode) setCodeSnippet(extracted.starterCode);
-    if (extracted.language) setLanguage(extracted.language);
+  async function extractAndSolveImage(imageDataUrl: string, mimeType: string) {
+    setVisionLoading(true);
+    setErrorState(null);
+    setStreaming(true);
+    setStreamStage("Extracting question from uploaded image...");
+    try {
+      const apiBase = await getApiBaseUrl();
+      const res = await requestVisionExtraction(
+        {
+          imageDataUrl,
+          mimeType: (mimeType || "image/png") as "image/png" | "image/jpeg" | "image/webp",
+          hintContext: document.title || ""
+        },
+        apiBase
+      );
+      setVisionMeta(res);
+      setVisionPreview(null);
+      const q = (res.extractedQuestion || res.extractedCode || "").trim();
+      const opts = res.extractedOptions || [];
+      const code = res.extractedCode || "";
+      if (q) setQuestionText(q);
+      if (opts.length) setOptionsText(opts.join("\n"));
+      if (code) setCodeSnippet(code);
+      if (res.detectedLanguage) setLanguage(res.detectedLanguage);
+
+      if (q.length >= 3) {
+        await runAnalyze(q, opts, code);
+      } else {
+        setStreaming(false);
+        setErrorState({
+          code: "VISION_EMPTY",
+          message: "Could not detect a readable question in the image. Please try a clearer image or paste the question."
+        });
+      }
+    } catch (err) {
+      setStreaming(false);
+      const e = err as Error & { code?: string };
+      setErrorState({ code: e.code || "VISION_ERROR", message: e.message || "Vision extraction failed." });
+    } finally {
+      setVisionLoading(false);
+    }
+  }
+
+  function handleUploadQuestionFile(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    input.value = "";
+
+    if (file.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = String(reader.result || "");
+        if (dataUrl) {
+          void extractAndSolveImage(dataUrl, file.type || "image/png");
+        }
+      };
+      reader.readAsDataURL(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = String(reader.result || "").trim();
+        if (text) {
+          const parsed = parseQuestionAndOptions(text);
+          const q = parsed.question || text;
+          const opts = parsed.options || [];
+          setQuestionText(q);
+          if (opts.length > 0) setOptionsText(opts.join("\n"));
+          void runAnalyze(q, opts, codeSnippet);
+        }
+      };
+      reader.readAsText(file);
+    }
   }
 
   function handleStartRegionSelect() {
@@ -262,35 +306,12 @@ function InPageOverlayApp(props: OverlayProps) {
     const height = Math.max(24, Math.abs(end.y - start.y));
     const cropped = await captureAndCropVisibleRegion({ x, y, width, height });
     setVisionPreview(cropped);
+    void extractAndSolveImage(cropped.croppedDataUrl, "image/png");
   }
 
   async function handleSendVisionPreview() {
     if (!visionPreview) return;
-    setVisionLoading(true);
-    setErrorState(null);
-    try {
-      const apiBase = await getApiBaseUrl();
-      const res = await requestVisionExtraction(
-        {
-          imageDataUrl: visionPreview.croppedDataUrl,
-          mimeType: "image/png",
-          hintContext: document.title || ""
-        },
-        apiBase
-      );
-      setVisionMeta(res);
-      setVisionPreview(null);
-      if (res.extractedQuestion) setQuestionText(res.extractedQuestion);
-      if (res.extractedOptions?.length) setOptionsText(res.extractedOptions.join("\n"));
-      if (res.extractedCode) setCodeSnippet(res.extractedCode);
-      if (res.detectedLanguage) setLanguage(res.detectedLanguage);
-      setLowOcrConfirmed(!res.requiresUserConfirmation);
-    } catch (err) {
-      const e = err as Error & { code?: string };
-      setErrorState({ code: e.code || "VISION_ERROR", message: e.message || "Vision extraction failed." });
-    } finally {
-      setVisionLoading(false);
-    }
+    await extractAndSolveImage(visionPreview.croppedDataUrl, "image/png");
   }
 
   const answerStr = result ? formatDirectAnswer(result.directAnswer, result) : "";
@@ -484,7 +505,7 @@ function InPageOverlayApp(props: OverlayProps) {
               <div
                 id="examai-vision-meta-card"
                 className="examai-card"
-                style={{ borderColor: visionMeta.requiresUserConfirmation && !lowOcrConfirmed ? "#f59e0b" : "#10b981" }}
+                style={{ borderColor: "#10b981" }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <strong style={{ fontSize: "11px", color: "#e2e8f0" }}>
@@ -497,33 +518,29 @@ function InPageOverlayApp(props: OverlayProps) {
                     Diagram/Table: {visionMeta.diagramSummary}
                   </div>
                 )}
-                {visionMeta.requiresUserConfirmation && !lowOcrConfirmed && (
-                  <div id="examai-low-ocr-banner" className="examai-notice" style={{ marginTop: "6px" }}>
-                    <strong>⚠️ Low OCR Confidence ({Math.round(visionMeta.ocrConfidence * 100)}%):</strong>{" "}
-                    {visionMeta.uncertaintyNotes || "Please review and edit the extracted text below, then confirm before analyzing."}
-                    <div style={{ marginTop: "6px" }}>
-                      <button
-                        id="examai-confirm-ocr-btn"
-                        className="examai-btn primary"
-                        onClick={() => {
-                          setLowOcrConfirmed(true);
-                          setErrorState(null);
-                        }}
-                      >
-                        ✓ Confirm Extracted Text
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 
             <div className="examai-card">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px", gap: "4px", flexWrap: "wrap" }}>
                 <strong style={{ fontSize: "11px", color: "#94a3b8", textTransform: "uppercase" }}>
-                  Captured Question (Editable in Panel Only)
+                  Question (Upload, Capture, or Paste to Get Answer)
                 </strong>
-                <div style={{ display: "flex", gap: "4px" }}>
+                <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+                  <label
+                    id="examai-upload-btn"
+                    className="examai-btn"
+                    style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", margin: 0 }}
+                  >
+                    📤 Upload Question
+                    <input
+                      id="examai-upload-input"
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,.txt,.md"
+                      style={{ display: "none" }}
+                      onChange={handleUploadQuestionFile}
+                    />
+                  </label>
                   <button id="examai-capture-region-btn" className="examai-btn" onClick={handleStartRegionSelect}>
                     📷 Capture Region
                   </button>
@@ -537,7 +554,39 @@ function InPageOverlayApp(props: OverlayProps) {
                 className="examai-textarea"
                 value={questionText}
                 onInput={(e) => setQuestionText((e.target as HTMLTextAreaElement).value)}
-                placeholder="Question statement..."
+                onPaste={(e) => {
+                  const items = e.clipboardData?.items;
+                  if (items) {
+                    for (let i = 0; i < items.length; i++) {
+                      const item = items[i];
+                      if (item.type.startsWith("image/")) {
+                        e.preventDefault();
+                        const file = item.getAsFile();
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            const dataUrl = String(reader.result || "");
+                            if (dataUrl) void extractAndSolveImage(dataUrl, file.type || "image/png");
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                        return;
+                      }
+                    }
+                  }
+                  const pastedText = e.clipboardData?.getData("text/plain")?.trim() || "";
+                  if (pastedText.length >= 5) {
+                    setTimeout(() => {
+                      const parsed = parseQuestionAndOptions(pastedText);
+                      const q = parsed.question || pastedText;
+                      const opts = parsed.options || [];
+                      setQuestionText(q);
+                      if (opts.length > 0) setOptionsText(opts.join("\n"));
+                      void runAnalyze(q, opts, codeSnippet);
+                    }, 20);
+                  }
+                }}
+                placeholder="Paste or upload a question (or image screenshot) to get the answer immediately..."
               />
               <textarea
                 id="examai-edit-options"
@@ -554,7 +603,7 @@ function InPageOverlayApp(props: OverlayProps) {
                   disabled={streaming}
                   onClick={() => void runAnalyze()}
                 >
-                  🚀 {streaming ? "Analyzing..." : "Analyze"}
+                  🚀 {streaming ? "Getting Answer..." : "Get Answer"}
                 </button>
                 {streaming && (
                   <button id="examai-cancel-stream" className="examai-btn danger" onClick={handleCancelStream}>
@@ -584,31 +633,6 @@ function InPageOverlayApp(props: OverlayProps) {
                 <span>{errorState.message}</span>
               </div>
             )}
-
-            <div className="examai-card">
-              <strong style={{ fontSize: "11px", color: "#94a3b8", textTransform: "uppercase" }}>
-                Progressive Hint Ladder (Lazy 1-4)
-              </strong>
-              <div className="examai-hint-row">
-                {[1, 2, 3, 4].map((lvl) => (
-                  <button
-                    key={lvl}
-                    data-hint-level={lvl}
-                    className={`examai-btn ${activeHintLevel === lvl ? "primary" : ""}`}
-                    onClick={() => void handleRequestHint(lvl)}
-                  >
-                    Level {lvl}
-                  </button>
-                ))}
-              </div>
-              {activeHintLevel !== null && (
-                <pre id="examai-hint-output" className="examai-pre">
-                  {hintLoading && !hintsByLevel[activeHintLevel]
-                    ? `Generating Level ${activeHintLevel} hint...`
-                    : hintsByLevel[activeHintLevel] || ""}
-                </pre>
-              )}
-            </div>
 
             {result && (
               <div id="examai-result-card" className="examai-card">

@@ -6112,7 +6112,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     sampleTests: array(SampleTestCaseSchema).max(20).optional().default([]),
     explanationLevel: ExplanationLevelEnum.optional().default("Technical")
   });
-  const CodeHintRequestSchema = object({
+  object({
     question: string().min(3).max(5e4),
     language: string().max(40).optional().default("python"),
     userCode: string().max(64e3).optional().default(""),
@@ -7402,26 +7402,6 @@ ${code}`.toLowerCase();
     }
     return readAssessmentStreamResponse(res, onProgress);
   }
-  async function requestCodingHint(request, apiBase, signal) {
-    const validated = CodeHintRequestSchema.parse(request);
-    const res = await fetch(`${apiBase.replace(/\/+$/, "")}/api/code/hint`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      signal,
-      body: JSON.stringify(validated)
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      const err = new Error(String(data.error || `HTTP ${res.status}`));
-      err.code = typeof data.code === "string" ? data.code : void 0;
-      throw err;
-    }
-    return {
-      level: Number(data.level || validated.level || 1),
-      activeHint: String(data.activeHint || ""),
-      hints: data.hints || {}
-    };
-  }
   async function requestVisionExtraction(request, apiBase, signal) {
     const validated = VisionExtractRequestSchema.parse(request);
     const res = await fetch(`${apiBase.replace(/\/+$/, "")}/api/vision/extract`, {
@@ -8169,15 +8149,12 @@ ${code}`.toLowerCase();
     const [questionText, setQuestionText] = d(((_a2 = props.initialCaptured) == null ? void 0 : _a2.question) || "");
     const [optionsText, setOptionsText] = d((((_b = props.initialCaptured) == null ? void 0 : _b.options) || []).join("\n"));
     const [codeSnippet, setCodeSnippet] = d(((_c = props.initialCaptured) == null ? void 0 : _c.codeSnippet) || "");
-    const [language, setLanguage] = d("python");
+    const [, setLanguage] = d("python");
     const [streaming, setStreaming] = d(false);
     const [streamStage, setStreamStage] = d("");
     const [abortCtrl, setAbortCtrl] = d(null);
     const [result, setResult] = d(null);
     const [errorState, setErrorState] = d(null);
-    const [hintsByLevel, setHintsByLevel] = d({});
-    const [activeHintLevel, setActiveHintLevel] = d(null);
-    const [hintLoading, setHintLoading] = d(false);
     const [copyStatus, setCopyStatus] = d("📋 Copy Answer");
     const [selectingRegion, setSelectingRegion] = d(false);
     const [dragStart, setDragStart] = d(null);
@@ -8185,7 +8162,6 @@ ${code}`.toLowerCase();
     const [visionPreview, setVisionPreview] = d(null);
     const [visionLoading, setVisionLoading] = d(false);
     const [visionMeta, setVisionMeta] = d(null);
-    const [lowOcrConfirmed, setLowOcrConfirmed] = d(true);
     h(() => {
       getStorageConfig({ theme: "dark", mode: "Practice Mode" }).then((cfg) => {
         if (cfg.theme === "light" || cfg.theme === "dark") setTheme(cfg.theme);
@@ -8210,15 +8186,11 @@ ${code}`.toLowerCase();
       }
     }, [props.autoRunToken, props.initialCaptured]);
     async function runAnalyze(qOverride, optsOverride, codeOverride) {
-      if ((visionMeta == null ? void 0 : visionMeta.requiresUserConfirmation) && !lowOcrConfirmed) {
-        setErrorState({
-          code: "LOW_OCR_CONFIDENCE_UNCONFIRMED",
-          message: "Low OCR confidence detected. Please review the extracted text and click 'Confirm Extracted Text' before analyzing."
-        });
-        return;
-      }
-      const q2 = (qOverride !== void 0 ? qOverride : questionText).trim();
-      const opts = optsOverride !== void 0 ? optsOverride : optionsText.split(/\r?\n/).map((l2) => l2.trim()).filter(Boolean);
+      const rawInput = (qOverride !== void 0 ? qOverride : questionText).trim();
+      const parsedInline = parseQuestionAndOptions(rawInput);
+      const manualOpts = optsOverride !== void 0 ? optsOverride : optionsText.split(/\r?\n/).map((l2) => l2.trim()).filter(Boolean);
+      const opts = manualOpts.length > 0 ? manualOpts : parsedInline.options;
+      const q2 = (manualOpts.length > 0 ? rawInput : parsedInline.question || rawInput).trim();
       const code = codeOverride !== void 0 ? codeOverride : codeSnippet;
       if (q2.length < 3) {
         setErrorState({ code: "EMPTY_QUESTION", message: "Please enter or select a question with at least 3 characters." });
@@ -8228,11 +8200,9 @@ ${code}`.toLowerCase();
       const controller = new AbortController();
       setAbortCtrl(controller);
       setStreaming(true);
-      setStreamStage("Connecting to ExamAssist AI...");
+      setStreamStage("Generating answer...");
       setErrorState(null);
       setResult(null);
-      setHintsByLevel({});
-      setActiveHintLevel(null);
       setAuthorizedRevealed(false);
       try {
         const apiBase = await getApiBaseUrl();
@@ -8276,40 +8246,92 @@ ${code}`.toLowerCase();
     function handleCancelStream() {
       abortCtrl == null ? void 0 : abortCtrl.abort();
     }
-    async function handleRequestHint(level) {
-      const q2 = questionText.trim();
-      if (q2.length < 3) {
-        setErrorState({ code: "EMPTY_QUESTION", message: "Enter or extract a problem statement before requesting a hint." });
-        return;
+    function handleExtractPageCoding() {
+      const extracted = extractCodingProblem(document);
+      const manager = new ExtractionManager();
+      const pageExtracted = manager.extract(document.activeElement, document);
+      const nextQ = extracted.statement || (pageExtracted == null ? void 0 : pageExtracted.question) || "";
+      const nextOpts = (pageExtracted == null ? void 0 : pageExtracted.options) || [];
+      const nextCode = extracted.starterCode || (pageExtracted == null ? void 0 : pageExtracted.codeSnippet) || "";
+      if (nextQ) setQuestionText(nextQ);
+      if (nextOpts.length > 0) setOptionsText(nextOpts.join("\n"));
+      if (nextCode) setCodeSnippet(nextCode);
+      if (extracted.language) setLanguage(extracted.language);
+      if (nextQ.trim().length >= 3) {
+        void runAnalyze(nextQ, nextOpts, nextCode);
       }
-      setActiveHintLevel(level);
-      if (hintsByLevel[level]) return;
-      setHintLoading(true);
+    }
+    async function extractAndSolveImage(imageDataUrl, mimeType) {
+      setVisionLoading(true);
+      setErrorState(null);
+      setStreaming(true);
+      setStreamStage("Extracting question from uploaded image...");
       try {
         const apiBase = await getApiBaseUrl();
-        const res = await requestCodingHint(
+        const res = await requestVisionExtraction(
           {
-            question: q2,
-            userCode: codeSnippet,
-            language,
-            level,
-            explanationLevel: "Technical"
+            imageDataUrl,
+            mimeType: mimeType || "image/png",
+            hintContext: document.title || ""
           },
           apiBase
         );
-        setHintsByLevel((prev) => ({ ...prev, [level]: res.activeHint }));
+        setVisionMeta(res);
+        setVisionPreview(null);
+        const q2 = (res.extractedQuestion || res.extractedCode || "").trim();
+        const opts = res.extractedOptions || [];
+        const code = res.extractedCode || "";
+        if (q2) setQuestionText(q2);
+        if (opts.length) setOptionsText(opts.join("\n"));
+        if (code) setCodeSnippet(code);
+        if (res.detectedLanguage) setLanguage(res.detectedLanguage);
+        if (q2.length >= 3) {
+          await runAnalyze(q2, opts, code);
+        } else {
+          setStreaming(false);
+          setErrorState({
+            code: "VISION_EMPTY",
+            message: "Could not detect a readable question in the image. Please try a clearer image or paste the question."
+          });
+        }
       } catch (err) {
+        setStreaming(false);
         const e2 = err;
-        setHintsByLevel((prev) => ({ ...prev, [level]: `Hint error: ${e2.message}` }));
+        setErrorState({ code: e2.code || "VISION_ERROR", message: e2.message || "Vision extraction failed." });
       } finally {
-        setHintLoading(false);
+        setVisionLoading(false);
       }
     }
-    function handleExtractPageCoding() {
-      const extracted = extractCodingProblem(document);
-      if (extracted.statement) setQuestionText(extracted.statement);
-      if (extracted.starterCode) setCodeSnippet(extracted.starterCode);
-      if (extracted.language) setLanguage(extracted.language);
+    function handleUploadQuestionFile(e2) {
+      var _a3;
+      const input = e2.target;
+      const file = (_a3 = input.files) == null ? void 0 : _a3[0];
+      if (!file) return;
+      input.value = "";
+      if (file.type.startsWith("image/")) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = String(reader.result || "");
+          if (dataUrl) {
+            void extractAndSolveImage(dataUrl, file.type || "image/png");
+          }
+        };
+        reader.readAsDataURL(file);
+      } else {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const text = String(reader.result || "").trim();
+          if (text) {
+            const parsed = parseQuestionAndOptions(text);
+            const q2 = parsed.question || text;
+            const opts = parsed.options || [];
+            setQuestionText(q2);
+            if (opts.length > 0) setOptionsText(opts.join("\n"));
+            void runAnalyze(q2, opts, codeSnippet);
+          }
+        };
+        reader.readAsText(file);
+      }
     }
     function handleStartRegionSelect() {
       setErrorState(null);
@@ -8329,35 +8351,11 @@ ${code}`.toLowerCase();
       const height = Math.max(24, Math.abs(end.y - start.y));
       const cropped = await captureAndCropVisibleRegion({ x: x2, y: y2, width, height });
       setVisionPreview(cropped);
+      void extractAndSolveImage(cropped.croppedDataUrl, "image/png");
     }
     async function handleSendVisionPreview() {
-      var _a3;
       if (!visionPreview) return;
-      setVisionLoading(true);
-      setErrorState(null);
-      try {
-        const apiBase = await getApiBaseUrl();
-        const res = await requestVisionExtraction(
-          {
-            imageDataUrl: visionPreview.croppedDataUrl,
-            mimeType: "image/png",
-            hintContext: document.title || ""
-          },
-          apiBase
-        );
-        setVisionMeta(res);
-        setVisionPreview(null);
-        if (res.extractedQuestion) setQuestionText(res.extractedQuestion);
-        if ((_a3 = res.extractedOptions) == null ? void 0 : _a3.length) setOptionsText(res.extractedOptions.join("\n"));
-        if (res.extractedCode) setCodeSnippet(res.extractedCode);
-        if (res.detectedLanguage) setLanguage(res.detectedLanguage);
-        setLowOcrConfirmed(!res.requiresUserConfirmation);
-      } catch (err) {
-        const e2 = err;
-        setErrorState({ code: e2.code || "VISION_ERROR", message: e2.message || "Vision extraction failed." });
-      } finally {
-        setVisionLoading(false);
-      }
+      await extractAndSolveImage(visionPreview.croppedDataUrl, "image/png");
     }
     const answerStr = result ? formatDirectAnswer(result.directAnswer, result) : "";
     const confidence = String((result == null ? void 0 : result.confidence) || "UNVERIFIED");
@@ -8562,7 +8560,7 @@ ${code}`.toLowerCase();
             {
               id: "examai-vision-meta-card",
               className: "examai-card",
-              style: { borderColor: visionMeta.requiresUserConfirmation && !lowOcrConfirmed ? "#f59e0b" : "#10b981" },
+              style: { borderColor: "#10b981" },
               children: [
                 /* @__PURE__ */ u$1("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
                   /* @__PURE__ */ u$1("strong", { style: { fontSize: "11px", color: "#e2e8f0" }, children: [
@@ -8577,35 +8575,35 @@ ${code}`.toLowerCase();
                 visionMeta.diagramSummary && /* @__PURE__ */ u$1("div", { style: { fontSize: "11px", color: "#cbd5e1", marginTop: "4px" }, children: [
                   "Diagram/Table: ",
                   visionMeta.diagramSummary
-                ] }),
-                visionMeta.requiresUserConfirmation && !lowOcrConfirmed && /* @__PURE__ */ u$1("div", { id: "examai-low-ocr-banner", className: "examai-notice", style: { marginTop: "6px" }, children: [
-                  /* @__PURE__ */ u$1("strong", { children: [
-                    "⚠️ Low OCR Confidence (",
-                    Math.round(visionMeta.ocrConfidence * 100),
-                    "%):"
-                  ] }),
-                  " ",
-                  visionMeta.uncertaintyNotes || "Please review and edit the extracted text below, then confirm before analyzing.",
-                  /* @__PURE__ */ u$1("div", { style: { marginTop: "6px" }, children: /* @__PURE__ */ u$1(
-                    "button",
-                    {
-                      id: "examai-confirm-ocr-btn",
-                      className: "examai-btn primary",
-                      onClick: () => {
-                        setLowOcrConfirmed(true);
-                        setErrorState(null);
-                      },
-                      children: "✓ Confirm Extracted Text"
-                    }
-                  ) })
                 ] })
               ]
             }
           ),
           /* @__PURE__ */ u$1("div", { className: "examai-card", children: [
             /* @__PURE__ */ u$1("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px", gap: "4px", flexWrap: "wrap" }, children: [
-              /* @__PURE__ */ u$1("strong", { style: { fontSize: "11px", color: "#94a3b8", textTransform: "uppercase" }, children: "Captured Question (Editable in Panel Only)" }),
-              /* @__PURE__ */ u$1("div", { style: { display: "flex", gap: "4px" }, children: [
+              /* @__PURE__ */ u$1("strong", { style: { fontSize: "11px", color: "#94a3b8", textTransform: "uppercase" }, children: "Question (Upload, Capture, or Paste to Get Answer)" }),
+              /* @__PURE__ */ u$1("div", { style: { display: "flex", gap: "4px", flexWrap: "wrap" }, children: [
+                /* @__PURE__ */ u$1(
+                  "label",
+                  {
+                    id: "examai-upload-btn",
+                    className: "examai-btn",
+                    style: { cursor: "pointer", display: "inline-flex", alignItems: "center", margin: 0 },
+                    children: [
+                      "📤 Upload Question",
+                      /* @__PURE__ */ u$1(
+                        "input",
+                        {
+                          id: "examai-upload-input",
+                          type: "file",
+                          accept: "image/png,image/jpeg,image/webp,.txt,.md",
+                          style: { display: "none" },
+                          onChange: handleUploadQuestionFile
+                        }
+                      )
+                    ]
+                  }
+                ),
                 /* @__PURE__ */ u$1("button", { id: "examai-capture-region-btn", className: "examai-btn", onClick: handleStartRegionSelect, children: "📷 Capture Region" }),
                 /* @__PURE__ */ u$1("button", { id: "examai-extract-coding", className: "examai-btn", onClick: handleExtractPageCoding, children: "🔍 Extract Page" })
               ] })
@@ -8617,7 +8615,40 @@ ${code}`.toLowerCase();
                 className: "examai-textarea",
                 value: questionText,
                 onInput: (e2) => setQuestionText(e2.target.value),
-                placeholder: "Question statement..."
+                onPaste: (e2) => {
+                  var _a3, _b2, _c2;
+                  const items = (_a3 = e2.clipboardData) == null ? void 0 : _a3.items;
+                  if (items) {
+                    for (let i2 = 0; i2 < items.length; i2++) {
+                      const item = items[i2];
+                      if (item.type.startsWith("image/")) {
+                        e2.preventDefault();
+                        const file = item.getAsFile();
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            const dataUrl = String(reader.result || "");
+                            if (dataUrl) void extractAndSolveImage(dataUrl, file.type || "image/png");
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                        return;
+                      }
+                    }
+                  }
+                  const pastedText = ((_c2 = (_b2 = e2.clipboardData) == null ? void 0 : _b2.getData("text/plain")) == null ? void 0 : _c2.trim()) || "";
+                  if (pastedText.length >= 5) {
+                    setTimeout(() => {
+                      const parsed = parseQuestionAndOptions(pastedText);
+                      const q2 = parsed.question || pastedText;
+                      const opts = parsed.options || [];
+                      setQuestionText(q2);
+                      if (opts.length > 0) setOptionsText(opts.join("\n"));
+                      void runAnalyze(q2, opts, codeSnippet);
+                    }, 20);
+                  }
+                },
+                placeholder: "Paste or upload a question (or image screenshot) to get the answer immediately..."
               }
             ),
             /* @__PURE__ */ u$1(
@@ -8641,7 +8672,7 @@ ${code}`.toLowerCase();
                   onClick: () => void runAnalyze(),
                   children: [
                     "🚀 ",
-                    streaming ? "Analyzing..." : "Analyze"
+                    streaming ? "Getting Answer..." : "Get Answer"
                   ]
                 }
               ),
@@ -8655,23 +8686,6 @@ ${code}`.toLowerCase();
           errorState && /* @__PURE__ */ u$1("div", { id: "examai-error-banner", className: "examai-error", "data-error-code": errorState.code, children: [
             /* @__PURE__ */ u$1("strong", { style: { display: "block", marginBottom: "4px" }, children: errorState.code === "CANCELLED" ? "Analysis Cancelled" : errorState.code === "AI_NOT_CONFIGURED" ? "⚠️ AI Key Not Configured" : "Assessment Error" }),
             /* @__PURE__ */ u$1("span", { children: errorState.message })
-          ] }),
-          /* @__PURE__ */ u$1("div", { className: "examai-card", children: [
-            /* @__PURE__ */ u$1("strong", { style: { fontSize: "11px", color: "#94a3b8", textTransform: "uppercase" }, children: "Progressive Hint Ladder (Lazy 1-4)" }),
-            /* @__PURE__ */ u$1("div", { className: "examai-hint-row", children: [1, 2, 3, 4].map((lvl) => /* @__PURE__ */ u$1(
-              "button",
-              {
-                "data-hint-level": lvl,
-                className: `examai-btn ${activeHintLevel === lvl ? "primary" : ""}`,
-                onClick: () => void handleRequestHint(lvl),
-                children: [
-                  "Level ",
-                  lvl
-                ]
-              },
-              lvl
-            )) }),
-            activeHintLevel !== null && /* @__PURE__ */ u$1("pre", { id: "examai-hint-output", className: "examai-pre", children: hintLoading && !hintsByLevel[activeHintLevel] ? `Generating Level ${activeHintLevel} hint...` : hintsByLevel[activeHintLevel] || "" })
           ] }),
           result && /* @__PURE__ */ u$1("div", { id: "examai-result-card", className: "examai-card", children: [
             /* @__PURE__ */ u$1("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }, children: [

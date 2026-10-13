@@ -269,9 +269,19 @@ function renderPerTestTable(runs: TestRunEntry[]): string {
         if (res.language && lEl) lEl.value = res.language;
         if (res.failingOutput && fEl) fEl.value = res.failingOutput;
         if (Array.isArray(res.sampleTests)) extractedSamples = res.sampleTests;
-        if (sEl) sEl.textContent = `Extracted from ${res.platform} (${res.editor?.adapter || "page"}).`;
+        if (sEl) sEl.textContent = `Extracted from ${res.platform} (${res.editor?.adapter || "page"}). Solving...`;
+        document.getElementById("sp-run-analyze")?.click();
       }
     });
+  });
+
+  document.getElementById("sp-question")?.addEventListener("paste", () => {
+    setTimeout(() => {
+      const qEl = document.getElementById("sp-question") as HTMLTextAreaElement | null;
+      if (qEl && qEl.value.trim().length >= 5) {
+        document.getElementById("sp-run-analyze")?.click();
+      }
+    }, 30);
   });
 
   document.getElementById("sp-cancel-analyze")?.addEventListener("click", () => {

@@ -6426,7 +6426,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
   </table>`;
   }
   (function initSidePanel() {
-    var _a2, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
+    var _a2, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m;
     const DB_NAME = "ExamAssistLocalHistoryDB";
     const STORE_NAME = "problem_history";
     let currentAnalysis = null;
@@ -6569,7 +6569,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!(tab == null ? void 0 : tab.id)) return;
       chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_CODING_PROBLEM" }, (res) => {
-        var _a3;
+        var _a3, _b2;
         if (res && res.statement) {
           const qEl = document.getElementById("sp-question");
           const cEl = document.getElementById("sp-code");
@@ -6581,14 +6581,24 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
           if (res.language && lEl) lEl.value = res.language;
           if (res.failingOutput && fEl) fEl.value = res.failingOutput;
           if (Array.isArray(res.sampleTests)) extractedSamples = res.sampleTests;
-          if (sEl) sEl.textContent = `Extracted from ${res.platform} (${((_a3 = res.editor) == null ? void 0 : _a3.adapter) || "page"}).`;
+          if (sEl) sEl.textContent = `Extracted from ${res.platform} (${((_a3 = res.editor) == null ? void 0 : _a3.adapter) || "page"}). Solving...`;
+          (_b2 = document.getElementById("sp-run-analyze")) == null ? void 0 : _b2.click();
         }
       });
     });
-    (_e = document.getElementById("sp-cancel-analyze")) == null ? void 0 : _e.addEventListener("click", () => {
+    (_e = document.getElementById("sp-question")) == null ? void 0 : _e.addEventListener("paste", () => {
+      setTimeout(() => {
+        var _a3;
+        const qEl = document.getElementById("sp-question");
+        if (qEl && qEl.value.trim().length >= 5) {
+          (_a3 = document.getElementById("sp-run-analyze")) == null ? void 0 : _a3.click();
+        }
+      }, 30);
+    });
+    (_f = document.getElementById("sp-cancel-analyze")) == null ? void 0 : _f.addEventListener("click", () => {
       activeAnalyzeController == null ? void 0 : activeAnalyzeController.abort();
     });
-    (_f = document.getElementById("sp-run-samples")) == null ? void 0 : _f.addEventListener("click", async () => {
+    (_g = document.getElementById("sp-run-samples")) == null ? void 0 : _g.addEventListener("click", async () => {
       var _a3, _b2;
       const userCode = ((_a3 = document.getElementById("sp-code")) == null ? void 0 : _a3.value.trim()) || "";
       const language = ((_b2 = document.getElementById("sp-language")) == null ? void 0 : _b2.value) || "python";
@@ -6617,7 +6627,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
         if (statusEl) statusEl.textContent = `Run samples error: ${err.message}`;
       }
     });
-    (_g = document.getElementById("sp-run-review")) == null ? void 0 : _g.addEventListener("click", async () => {
+    (_h = document.getElementById("sp-run-review")) == null ? void 0 : _h.addEventListener("click", async () => {
       var _a3, _b2, _c2;
       const question = ((_a3 = document.getElementById("sp-question")) == null ? void 0 : _a3.value.trim()) || "";
       const code = ((_b2 = document.getElementById("sp-code")) == null ? void 0 : _b2.value.trim()) || "";
@@ -6649,7 +6659,7 @@ Edge Cases: ${(data.edgeCases || []).join(", ")}`;
         if (statusEl) statusEl.textContent = `Code review error: ${err.message}`;
       }
     });
-    (_h = document.getElementById("sp-translate-btn")) == null ? void 0 : _h.addEventListener("click", async () => {
+    (_i = document.getElementById("sp-translate-btn")) == null ? void 0 : _i.addEventListener("click", async () => {
       var _a3, _b2, _c2, _d2, _e2, _f2, _g2;
       const question = ((_a3 = document.getElementById("sp-question")) == null ? void 0 : _a3.value.trim()) || "";
       const sourceCode = ((_b2 = currentAnalysis == null ? void 0 : currentAnalysis.solution) == null ? void 0 : _b2.code) || ((_c2 = document.getElementById("sp-code")) == null ? void 0 : _c2.value.trim()) || "";
@@ -6688,7 +6698,7 @@ Edge Cases: ${(data.edgeCases || []).join(", ")}`;
         if (solCodeEl) solCodeEl.textContent = `Translation error: ${err.message}`;
       }
     });
-    (_i = document.getElementById("sp-explain-error")) == null ? void 0 : _i.addEventListener("click", async () => {
+    (_j = document.getElementById("sp-explain-error")) == null ? void 0 : _j.addEventListener("click", async () => {
       var _a3, _b2, _c2;
       const code = ((_a3 = document.getElementById("sp-code")) == null ? void 0 : _a3.value.trim()) || "";
       const errorOutput = ((_b2 = document.getElementById("sp-failing-output")) == null ? void 0 : _b2.value.trim()) || "";
@@ -6716,8 +6726,8 @@ How to Fix: ${data.howToFix}`;
         out.textContent = `Error explanation failed: ${err.message}`;
       }
     });
-    (_j = document.getElementById("sp-run-analyze")) == null ? void 0 : _j.addEventListener("click", async () => {
-      var _a3, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m, _n, _o, _p, _q, _r, _s, _t;
+    (_k = document.getElementById("sp-run-analyze")) == null ? void 0 : _k.addEventListener("click", async () => {
+      var _a3, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2, _n, _o, _p, _q, _r, _s, _t;
       const question = ((_a3 = document.getElementById("sp-question")) == null ? void 0 : _a3.value.trim()) || "";
       const userCode = ((_b2 = document.getElementById("sp-code")) == null ? void 0 : _b2.value) || "";
       const language = ((_c2 = document.getElementById("sp-language")) == null ? void 0 : _c2.value) || "python";
@@ -6798,7 +6808,7 @@ Ranking & Trade-offs: ${((_k2 = data.ranking) == null ? void 0 : _k2.winnerReaso
         }
         const tableContainer = document.getElementById("sp-tests-table-container");
         if (tableContainer) {
-          tableContainer.innerHTML = renderPerTestTable(((_m = data.verification) == null ? void 0 : _m.runs) || []);
+          tableContainer.innerHTML = renderPerTestTable(((_m2 = data.verification) == null ? void 0 : _m2.runs) || []);
         }
         const testsOut = document.getElementById("sp-tests-output");
         if (testsOut) {
@@ -6835,7 +6845,7 @@ Ranking & Trade-offs: ${((_k2 = data.ranking) == null ? void 0 : _k2.winnerReaso
         if (cancelBtn) cancelBtn.style.display = "none";
       }
     });
-    (_k = document.getElementById("sp-run-debug")) == null ? void 0 : _k.addEventListener("click", async () => {
+    (_l = document.getElementById("sp-run-debug")) == null ? void 0 : _l.addEventListener("click", async () => {
       var _a3, _b2, _c2, _d2, _e2;
       const question = ((_a3 = document.getElementById("sp-question")) == null ? void 0 : _a3.value.trim()) || "Debug submitted code";
       const userCode = ((_b2 = document.getElementById("sp-code")) == null ? void 0 : _b2.value.trim()) || "";
@@ -6882,7 +6892,7 @@ ${data.minimalDiff}`;
         out.textContent = `Debug error: ${e.message}`;
       }
     });
-    (_l = document.getElementById("sp-clear-history")) == null ? void 0 : _l.addEventListener("click", () => {
+    (_m = document.getElementById("sp-clear-history")) == null ? void 0 : _m.addEventListener("click", () => {
       void clearHistory();
     });
     void updateHistoryCount();
