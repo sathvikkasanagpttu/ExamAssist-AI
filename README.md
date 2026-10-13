@@ -183,27 +183,38 @@ The repository includes a rigorous offline evaluation suite in [`server/eval/`](
 ```bash
 cd server
 
-# Fast deterministic CI smoke check (mock AI, zero API cost)
+# Fast deterministic CI smoke check (writes strictly to smoke baseline/report)
 npm run eval:smoke
 
-# Regression gate against baseline accuracy & safety thresholds
+# Regression gate against measured live baseline (236 academic questions)
 npm run eval:gate
 
-# Live evaluation on a specific ablation config with call & concurrency caps
-EVAL_MAX_CALLS=100 EVAL_CONCURRENCY=3 npm run eval -- --config e_specialized --limit 25
+# Full multi-language coding ablation (configs 1..6 across 185 scored problems) + 7-case Red-Team suite
+npm run eval:code
 ```
 
-Every run outputs structured JSON and a full Markdown calibration report in `server/eval/results/<timestamp>_<config>.md`.
+Every run outputs structured JSON and a full Markdown calibration report in `server/eval/results/` (see [`docs/EVAL_REPORT.md`](docs/EVAL_REPORT.md) for the complete text and coding ablation tables).
 
 ---
 
-## 🧪 Testing & Quality Assurance
+## 🧪 Testing, Building & Clean Packaging
 
 ```bash
+# 1. Backend Lint + Unit/Integration Tests + Evals + Clean Packaging
 cd server
-npm run lint        # Syntax & static checks across all 51 ESM modules
-npm test            # 77-test node --test suite (unit, integration, RAG, extractors, solvers, agent)
-npm run eval:smoke  # End-to-end evaluation pipeline verification
+npm run lint        # Syntax & static checks across all 61 ESM modules
+npm test            # Full node --test suite (Phases 0–5 unit, integration, AST, vision, RAG, MCP, OTel)
+npm run eval:smoke  # Deterministic smoke check
+npm run eval:gate   # Live baseline regression gate
+npm run eval:code   # 6-config coding ablation + red-team containment suite
+npm run pack        # Builds clean ExamAssist-AI-clean.zip (verifies zero secrets/.env/node_modules/.DS_Store)
+
+# 2. Extension TypeScript Typecheck + Vite Build + Vitest Adapter Tests + Playwright E2E
+cd ../extension
+npm run typecheck   # Strict TypeScript compiler check
+npm run build       # Vite + Preact + Tailwind CSS bundle into extension/dist/
+npm test            # Vitest + jsdom read-only adapter fixture tests
+npm run test:e2e    # Playwright E2E on Monaco, CodeMirror, textarea & Moodle fixtures
 ```
 
 ---
@@ -216,23 +227,32 @@ npm run eval:smoke  # End-to-end evaluation pipeline verification
 | `GET` | `/api/config` | Supported question types, operating modes, and rate limits |
 | `POST` | `/api/assessment/analyze` | Synchronous full-pipeline analysis returning structured JSON |
 | `POST` | `/api/assessment/analyze/stream` | Real-time **Server-Sent Events (SSE)** stream (`classified` → `searching` → `retrieved` → `solving` → `verifying` → `done`) |
-| `POST` | `/api/question/classify` | Rule-based 10-type classifier & subject/difficulty detector |
-| `POST` | `/api/search` | Multi-angle academic query generator and deduplicated ranker |
-| `POST` | `/api/evidence/verify` | Claim-level support & contradiction verifier |
+| `POST` | `/api/code/analyze` | Advanced coding solver: Tree-Sitter WASM AST, property/differential/mutation tests, taxonomy repair (`<= 3`), ranking, and 5-size log-log complexity |
+| `POST` | `/api/code/hint` | Lazy per-level coding hint generator (`level: 1..4`) with single retry and typed error `AI_INVALID_HINT_RESPONSE` |
+| `POST` | `/api/code/run-samples` | Executes user/starter code against visible sample tests in the isolated sandbox without LLM calls |
+| `POST` | `/api/code/review` | Reviews user code for correctness, complexity, style, and minimal unified diff |
+| `POST` | `/api/code/translate` | Translates code across `python`, `cpp`, `c`, `java`, `javascript`, and `sql` and verifies on sample tests |
+| `POST` | `/api/code/explain-error` | Classifies compiler/runtime stderr via failure taxonomy + AST and produces a minimal fix diff |
+| `POST` | `/api/code/ast` | Runs `web-tree-sitter` WASM AST inspection |
+| `POST` | `/api/vision/extract` | User-triggered screenshot OCR + Vision extraction (`<= 4MB`, MIME + magic-byte check, zero image persistence, low-OCR confirmation gate) |
 | `POST` | `/api/kb/documents` | Multipart upload (`PDF`/`DOCX`/`MD`/`TXT`) for profile-scoped Course Notes |
 | `GET` | `/api/kb/documents` | Lists indexed documents and byte usage for `X-Local-User-Id` |
 | `DELETE` | `/api/kb/documents/:id` | Cascade-deletes document, chunks, and embeddings for `X-Local-User-Id` |
-| `POST` | `/api/kb/search` | Hybrid `pgvector` + full-text RRF diagnostic search |
+| `POST` | `/api/kb/search` | Searches official language docs (`Python`, `cppreference`, `Java SE`, `MDN`) + user Course Notes with `doc` + `section` citations |
+| `GET` | `/api/traces` | Localhost-only (`127.0.0.1`) OpenTelemetry stage & tool span viewer (code/questions redacted by default) |
 
 ---
 
-## 🛡️ Academic Integrity, Privacy & Security
+## 🛡️ Academic Integrity, Privacy & Deliverables Documentation
 
 - **Permitted Use Only**: Designed strictly for self-study, practice tests, and assessments where external AI/search tools are explicitly authorized.
-- **Zero Stealth / Zero Automation**: The panel is always visible, user-triggered, and never interacts with page form controls or submission buttons.
-- **Secret Hygiene**: API keys live exclusively in `server/.env` (untracked by Git) and are never bundled into extension code.
-- **Detailed Documentation**:
-  - [Architecture Deep Dive](docs/ARCHITECTURE.md)
-  - [API Reference & Schemas](docs/API.md)
-  - [Security & Sandbox Boundaries](docs/SECURITY.md)
-  - [Workflow & Developer Guide](docs/WORKFLOW.md)
+- **Zero Stealth / Read-Only Editors**: Always visible and user-triggered; never writes into host page editors, dispatches synthetic keystrokes, or auto-submits.
+- **Zero Screenshot Persistence**: Vision/OCR crops are processed strictly in memory (`imagePersisted: false`) and never written to disk or logs.
+- **Deliverable Documentation**:
+  - [`ARCHITECTURE.md`](docs/ARCHITECTURE.md) — System & Pipeline Architecture
+  - [`API.md`](docs/API.md) — REST, SSE, Coding, Vision, RAG & MCP API Reference
+  - [`SECURITY_AND_PRIVACY.md`](docs/SECURITY_AND_PRIVACY.md) — Sandbox Isolation, Permissions & Privacy Guarantees
+  - [`ADAPTERS_GUIDE.md`](docs/ADAPTERS_GUIDE.md) — Read-Only Editor & Assessment Platform Adapters Guide
+  - [`EVAL_REPORT.md`](docs/EVAL_REPORT.md) — Text (`a–f`) & Coding (`1–6`) Ablation Tables and Red-Team Results
+  - [`REVIEW.md`](REVIEW.md) — Uncertain Coding Dataset Items (`needsReview: true`)
+
