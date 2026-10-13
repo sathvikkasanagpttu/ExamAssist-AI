@@ -28,6 +28,14 @@ if (mode === "live" && (expected.smokeMode === true || key.includes(":smoke:")))
   throw new Error(`Baseline entry ${key} is a smoke run. eval:gate never uses smoke baselines for real comparisons.`);
 }
 
+const REQUIRED_METADATA_FIELDS = ["runId", "model", "date", "datasetHash"];
+for (const field of REQUIRED_METADATA_FIELDS) {
+  const val = expected[field] || (field === "date" ? expected.recordedAt : undefined);
+  if (!val) {
+    throw new Error(`Baseline entry ${key} rejected: missing required metadata field '${field}'. Stored baselines in ${baselineFile} must include runId, model, date, and datasetHash.`);
+  }
+}
+
 const resultsDir = path.join(here, "results");
 if (!existsSync(resultsDir)) mkdirSync(resultsDir, { recursive: true });
 const output = path.join(resultsDir, `.gate-${process.pid}.json`);
@@ -41,6 +49,12 @@ if (child.status !== 0) process.exit(child.status || 1);
 
 try {
   const actual = JSON.parse(readFileSync(output, "utf8"));
+  for (const field of REQUIRED_METADATA_FIELDS) {
+    const val = actual[field] || (field === "date" ? actual.timestamp : undefined);
+    if (!val) {
+      throw new Error(`Run result rejected: missing required metadata field '${field}'. Stored runs must include runId, model, date, and datasetHash.`);
+    }
+  }
   if (actual.datasetHash !== expected.datasetHash) throw new Error("Dataset changed from the stored baseline. Review the change and commit a new measured baseline before running the gate.");
   const tolerance = baseline.tolerance || {};
   const accuracyDrop = expected.metrics.accuracy - actual.metrics.accuracy;

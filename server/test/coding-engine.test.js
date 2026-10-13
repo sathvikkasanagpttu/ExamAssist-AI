@@ -50,7 +50,7 @@ test("Coding Eval Dataset: code-dataset.jsonl has >= 150 multi-language problems
     assert.ok(row.title, "Problem must have title");
     assert.ok(row.statement.length >= 10, "Problem must have statement");
     assert.ok(Array.isArray(row.sampleTests) && row.sampleTests.length >= 1, "Must have sampleTests");
-    assert.ok(Array.isArray(row.hiddenTests) && row.hiddenTests.length >= 1, "Must have hiddenTests");
+    assert.ok(Array.isArray(row.hiddenTests) && row.hiddenTests.length >= 5, `Problem ${row.id} must have >= 5 hiddenTests`);
     if (row.needsReview) {
       assert.ok(reviewMarkdown.includes(row.id), `Problem ${row.id} with needsReview=true must be listed in REVIEW.md`);
     } else {

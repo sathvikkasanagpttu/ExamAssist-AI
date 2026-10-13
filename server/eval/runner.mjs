@@ -307,7 +307,23 @@ const durationSeconds = round((Date.now() - startedAt) / 1000, 1);
 const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
 const jsonPath = outputPath ? path.resolve(process.cwd(), outputPath) : path.join(resultsDir, `${timestamp}_${config.name}${redteamMode ? "_redteam" : ""}.json`);
 const markdownPath = jsonPath.endsWith(".json") ? jsonPath.replace(/\.json$/, ".md") : `${jsonPath}.md`;
-const output = { config: config.name, timestamp: new Date().toISOString(), dataset: path.basename(datasetPath), datasetHash, seed, smokeMode, redteamMode, shuffleOptions, totalDurationSec: durationSeconds, metrics, results: records };
+const runId = `${timestamp}_${config.name}_${seed}`;
+const output = {
+  runId,
+  model: smokeMode ? "mock" : (process.env.OPENAI_MODEL || "gpt-4o"),
+  date: new Date().toISOString(),
+  timestamp: new Date().toISOString(),
+  config: config.name,
+  dataset: path.basename(datasetPath),
+  datasetHash,
+  seed,
+  smokeMode,
+  redteamMode,
+  shuffleOptions,
+  totalDurationSec: durationSeconds,
+  metrics,
+  results: records
+};
 writeFileSync(jsonPath, JSON.stringify(output, null, 2), "utf8");
 const value = (item) => item === null || item === undefined ? "Not assessed" : `${item}%`;
 const tableRows = (collection) => Object.entries(collection).map(([name, metric]) => `| ${name} | ${metric.correct} / ${metric.total} | ${value(metric.accuracy)} |`).join("\n") || "| — | — | — |";

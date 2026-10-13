@@ -15,12 +15,31 @@
         "accuracy": 19.07,
         "unverifiedWrongAnswerRate": 100,
         "calibration": {
-          "HIGH": { "total": 0, "correct": 0, "accuracy": null },
-          "MEDIUM": { "total": 0, "correct": 0, "accuracy": null },
-          "LOW": { "total": 0, "correct": 0, "accuracy": null },
-          "UNVERIFIED": { "total": 236, "correct": 45, "accuracy": 19.07 }
+          "HIGH": {
+            "total": 0,
+            "correct": 0,
+            "accuracy": null
+          },
+          "MEDIUM": {
+            "total": 0,
+            "correct": 0,
+            "accuracy": null
+          },
+          "LOW": {
+            "total": 0,
+            "correct": 0,
+            "accuracy": null
+          },
+          "UNVERIFIED": {
+            "total": 236,
+            "correct": 45,
+            "accuracy": 19.07
+          }
         }
-      }
+      },
+      "runId": "2026-10-12T19-32-40_a_single_pass_smoke_examassist-phase1-baseline",
+      "model": "mock",
+      "date": "2026-10-12T19:32:40.067Z"
     },
     "a_single_pass:smoke:examassist-eval-v1": {
       "smokeMode": true,
@@ -29,12 +48,31 @@
         "accuracy": 22.88,
         "unverifiedWrongAnswerRate": 100,
         "calibration": {
-          "HIGH": { "total": 0, "correct": 0, "accuracy": null },
-          "MEDIUM": { "total": 0, "correct": 0, "accuracy": null },
-          "LOW": { "total": 0, "correct": 0, "accuracy": null },
-          "UNVERIFIED": { "total": 236, "correct": 54, "accuracy": 22.88 }
+          "HIGH": {
+            "total": 0,
+            "correct": 0,
+            "accuracy": null
+          },
+          "MEDIUM": {
+            "total": 0,
+            "correct": 0,
+            "accuracy": null
+          },
+          "LOW": {
+            "total": 0,
+            "correct": 0,
+            "accuracy": null
+          },
+          "UNVERIFIED": {
+            "total": 236,
+            "correct": 54,
+            "accuracy": 22.88
+          }
         }
-      }
+      },
+      "runId": "2026-10-12T19-32-40_a_single_pass_smoke_examassist-eval-v1",
+      "model": "mock",
+      "date": "2026-10-12T19:32:40.067Z"
     }
   }
 }

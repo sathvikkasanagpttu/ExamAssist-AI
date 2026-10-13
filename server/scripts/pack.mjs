@@ -64,9 +64,16 @@ export function buildAndAuditCleanZip(targetZip = zipPath, rootDir = repoRoot) {
     "*/.env.production",
     "*.log",
     "*/*.log",
+    "*/*/*.log",
+    "*/**.log",
+    "logs/*",
+    "*/logs/*",
+    "*/*/logs/*",
     ".DS_Store",
     "*/.DS_Store",
     "*/*/.DS_Store",
+    "*/*/*/.DS_Store",
+    "*.DS_Store",
     "*.zip",
     "*/*.zip",
     "server/eval/cache/*",
@@ -84,7 +91,7 @@ export function buildAndAuditCleanZip(targetZip = zipPath, rootDir = repoRoot) {
   const listOutput = execFileSync("unzip", ["-Z1", targetZip], { cwd: rootDir, encoding: "utf8" });
   const entries = listOutput.split(/\r?\n/).filter(Boolean);
 
-  const forbiddenRegex = /(^|\/)(\.env(\.(?!example$)[^/]+)?|node_modules|\.DS_Store|\.git)(\/|$)|\.log$|\.zip$/i;
+  const forbiddenRegex = /(^|\/)(\.env(\.(?!example$)[^/]+)?|node_modules|\.DS_Store|\.git|logs)(\/|$)|\.log$|\.zip$/i;
   const violations = entries.filter((entry) => forbiddenRegex.test(entry));
   if (violations.length > 0) {
     rmSync(targetZip, { force: true });

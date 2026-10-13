@@ -29,8 +29,9 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { AIClient } from "../aiClient.js";
+import { AIClient, defaultAIClient } from "../aiClient.js";
 import { analyzeCodingProblem } from "../pipeline/codingEngine.js";
 import { executeInSandbox, sandboxHealth } from "../pipeline/sandboxClient.js";
 
@@ -313,9 +314,34 @@ function createDeterministicEvalEnvironment(datasetRows, ablation) {
  * Crucially, `hiddenTests` are NEVER passed to `analyzeCodingProblem`; they are
  * evaluated strictly post-hoc against `result.solution.code`.
  */
-export async function runCodingAblation(ablationKey, scoredRows) {
+export async function runCodingAblation(ablationKey, scoredRows, { simulate = true, aiClient = null, executeFn = null } = {}) {
   const ablation = CODING_ABLATION_CONFIGS[ablationKey] || CODING_ABLATION_CONFIGS["4_plus_diff_property"];
-  const { aiClient, executeFn } = createDeterministicEvalEnvironment(scoredRows, ablation);
+  let activeAi = aiClient;
+  let activeExec = executeFn;
+
+  if (simulate) {
+    const simEnv = createDeterministicEvalEnvironment(scoredRows, ablation);
+    activeAi = activeAi || simEnv.aiClient;
+    activeExec = activeExec || simEnv.executeFn;
+  } else {
+    // Non-simulated live evaluation: strict ground-truth AI and Docker sandbox without oracles or injected bugs
+    if (!activeAi) {
+      activeAi = defaultAIClient;
+      if (!activeAi?.isConfigured) {
+        throw new Error("Live evaluation requires configured AI (OPENAI_API_KEY). Set OPENAI_API_KEY in server/.env or pass --simulate.");
+      }
+    }
+    if (!activeExec) {
+      activeExec = async ({ language, code, stdin }) => {
+        return executeInSandbox({
+          language,
+          code,
+          stdin: String(stdin ?? ""),
+          timeoutSeconds: 2.0
+        });
+      };
+    }
+  }
 
   let passAt1Count = 0;
   let passWithRepairCount = 0;
@@ -346,8 +372,8 @@ export async function runCodingAblation(ablationKey, scoredRows) {
       sampleTests: row.sampleTests || [],
       sqlSchema: row.sqlSchema || "",
       ablationConfig: ablation,
-      aiClient,
-      executeFn
+      aiClient: activeAi,
+      executeFn: activeExec
     });
     const elapsedMs = Math.max(1, Date.now() - t0);
     latenciesMs.push(elapsedMs);
@@ -365,7 +391,7 @@ export async function runCodingAblation(ablationKey, scoredRows) {
         if (matchesRef) passedHiddenTests++;
         else allHiddenPassed = false;
       } else {
-        const hRun = await executeFn({
+        const hRun = await activeExec({
           language: row.language || "python",
           code: result.solution?.code || "",
           stdin: String(ht.stdin ?? "")
@@ -599,19 +625,43 @@ export async function runCodingRedTeamSuite({ executeFn = null } = {}) {
   };
 }
 
-export function formatCodingEvalMarkdownReport({ datasetSummary, ablationResults, redTeam }) {
-  const lines = [
-    "# ExamAssist AI — Phase 5 Coding Evaluation & Ablation Report",
-    "",
+export function formatCodingEvalMarkdownReport({
+  datasetSummary,
+  ablationResults,
+  redTeam,
+  simulate = false,
+  runId = null,
+  model = null,
+  date = null,
+  datasetHash = null
+}) {
+  const lines = [];
+  if (simulate) {
+    lines.push("> [!WARNING]");
+    lines.push("> **SIMULATED — scripted AI/sandbox, not model quality**");
+    lines.push("");
+  }
+  lines.push(`# ExamAssist AI — Phase 5 Coding Evaluation & Ablation Report${simulate ? " (SIMULATED)" : ""}`);
+  lines.push("");
+  if (simulate) {
+    lines.push("- **Execution Mode**: `SIMULATED` (deterministic scripted AI and sandbox mock).");
+  } else {
+    lines.push("- **Execution Mode**: `LIVE` (real LLM model calls and live Docker sandbox execution).");
+  }
+  if (runId) lines.push(`- **Run ID**: \`${runId}\``);
+  if (model) lines.push(`- **Model**: \`${model}\``);
+  if (date) lines.push(`- **Date**: ${date}`);
+  if (datasetHash) lines.push(`- **Dataset Hash (SHA-256)**: \`${datasetHash}\``);
+  lines.push(
     `- **Total Coding Dataset Rows**: ${datasetSummary.totalRows} (${datasetSummary.scoredCount} scored, ${datasetSummary.reviewCount} marked \`needsReview: true\` in \`REVIEW.md\`)`,
-    `- **Hidden Tests Policy**: Solver never sees \`hiddenTests\`; hidden tests are evaluated strictly post-hoc.`,
+    `- **Hidden Tests Policy**: Solver never sees \`hiddenTests\` (minimum 5 tests per problem); hidden tests are evaluated strictly post-hoc.`,
     `- **Hint Judge Policy**: \`hintUsefulnessJudge\` is explicitly labeled as an **LLM-as-a-Judge** rubric score (1–5), never conflated with sandbox execution.`,
     "",
     "## 1. Ablation Comparison Table",
     "",
     "| Ablation Config | pass@1 (%) | Pass w/ Repair (%) | Hidden-Test Pass (%) | False-Pass Rate (%) | Compile Err (%) | Timeout (%) | Test Strength (Mutation %) | Complexity Agreement (%) | Hint Judge (1-5, Judge) | Latency p50 / p95 (ms) | Est. Cost ($) |",
     "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
-  ];
+  );
 
   for (const r of ablationResults) {
     lines.push(
@@ -640,10 +690,26 @@ export function formatCodingEvalMarkdownReport({ datasetSummary, ablationResults
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 if (isMain) {
   const args = process.argv.slice(2);
+  const isSimulate = args.includes("--simulate");
   const limitIdx = args.indexOf("--limit");
   const limit = limitIdx !== -1 ? Number(args[limitIdx + 1]) : 0;
   const ablationIdx = args.indexOf("--ablation");
   const requestedAblation = ablationIdx !== -1 ? args[ablationIdx + 1] : "all";
+
+  if (!isSimulate) {
+    const hasAi = defaultAIClient.isConfigured;
+    const hasSandbox = await sandboxHealth();
+    if (!hasAi || !hasSandbox) {
+      console.error("\n[eval:code] Error: Live coding evaluation requires aiConfigured and sandboxEnabled.");
+      if (!hasAi) console.error("  - AI is not configured (missing or empty OPENAI_API_KEY in server/.env)");
+      if (!hasSandbox) console.error("  - Docker sandbox service is not reachable (SANDBOX_URL is offline)");
+      console.error("\nTo run the offline deterministic simulator instead, pass the explicit --simulate flag:");
+      console.error("  node eval/code-runner.mjs --simulate\n");
+      process.exit(1);
+    }
+  } else {
+    console.log("SIMULATED — scripted AI/sandbox, not model quality\n");
+  }
 
   const { totalRows, reviewCount, scoredRows } = loadCodingDataset({ limit });
   const keys =
@@ -653,13 +719,24 @@ if (isMain) {
 
   const ablationResults = [];
   for (const key of keys) {
-    const res = await runCodingAblation(key, scoredRows);
+    const res = await runCodingAblation(key, scoredRows, { simulate: isSimulate });
     ablationResults.push(res);
   }
 
   const redTeam = await runCodingRedTeamSuite();
+  const runId = isSimulate ? `simulated_${Date.now()}` : `${Date.now()}_live_coding_eval`;
+  const model = isSimulate ? "simulator" : (process.env.OPENAI_MODEL || "gpt-4o");
+  const date = new Date().toISOString();
+  const datasetHash = createHash("sha256").update(fs.readFileSync(CODE_DATASET_PATH)).digest("hex");
+
   const reportObj = {
-    generatedAt: new Date().toISOString(),
+    runId,
+    model,
+    date,
+    datasetHash,
+    simulate: isSimulate,
+    banner: isSimulate ? "SIMULATED — scripted AI/sandbox, not model quality" : null,
+    generatedAt: date,
     datasetSummary: {
       totalRows,
       scoredCount: scoredRows.length,
@@ -670,8 +747,8 @@ if (isMain) {
   };
 
   if (!fs.existsSync(RESULTS_DIR)) fs.mkdirSync(RESULTS_DIR, { recursive: true });
-  const jsonPath = path.join(RESULTS_DIR, "coding-eval-report.json");
-  const mdPath = path.join(RESULTS_DIR, "coding-eval-report.md");
+  const jsonPath = path.join(RESULTS_DIR, isSimulate ? "coding-eval-report-simulated.json" : "coding-eval-report.json");
+  const mdPath = path.join(RESULTS_DIR, isSimulate ? "coding-eval-report-simulated.md" : "coding-eval-report.md");
   fs.writeFileSync(jsonPath, JSON.stringify(reportObj, null, 2), "utf8");
   const md = formatCodingEvalMarkdownReport(reportObj);
   fs.writeFileSync(mdPath, md, "utf8");

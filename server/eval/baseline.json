@@ -179,7 +179,9 @@
             "accuracy": 84.85
           }
         }
-      }
+      },
+      "runId": "2026-10-12T19-32-40_a_single_pass_live_examassist-eval-v1",
+      "date": "2026-10-12T19:32:40.067Z"
     },
     "b_solve_evidence:live:examassist-eval-v1": {
       "smokeMode": false,
@@ -352,7 +354,9 @@
             "accuracy": 84.85
           }
         }
-      }
+      },
+      "runId": "2026-10-12T19-32-40_b_solve_evidence_live_examassist-eval-v1",
+      "date": "2026-10-12T19:32:40.762Z"
     },
     "c_solve_tiebreak:live:examassist-eval-v1": {
       "smokeMode": false,
@@ -525,7 +529,9 @@
             "accuracy": 84.85
           }
         }
-      }
+      },
+      "runId": "2026-10-12T19-32-41_c_solve_tiebreak_live_examassist-eval-v1",
+      "date": "2026-10-12T19:32:41.432Z"
     },
     "d_rag:live:examassist-eval-v1": {
       "smokeMode": false,
@@ -698,7 +704,9 @@
             "accuracy": 84.85
           }
         }
-      }
+      },
+      "runId": "2026-10-12T19-32-42_d_rag_live_examassist-eval-v1",
+      "date": "2026-10-12T19:32:42.113Z"
     },
     "e_specialized:live:examassist-eval-v1": {
       "smokeMode": false,
@@ -871,7 +879,9 @@
             "accuracy": 84.85
           }
         }
-      }
+      },
+      "runId": "2026-10-12T19-32-42_e_specialized_live_examassist-eval-v1",
+      "date": "2026-10-12T19:32:42.782Z"
     },
     "f_agent:live:examassist-eval-v1": {
       "smokeMode": false,
@@ -1044,7 +1054,9 @@
             "accuracy": 84.85
           }
         }
-      }
+      },
+      "runId": "2026-10-12T19-32-43_f_agent_live_examassist-eval-v1",
+      "date": "2026-10-12T19:32:43.438Z"
     }
   }
 }
