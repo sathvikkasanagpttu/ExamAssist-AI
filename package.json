@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "lint": "npm --prefix server run lint && npm --prefix extension run lint",
+    "typecheck": "npm --prefix extension run typecheck",
     "test": "npm --prefix server test && npm --prefix extension test",
+    "test:e2e": "npm --prefix extension run test:e2e",
     "build": "npm --prefix extension run build",
     "pack": "npm --prefix server run pack"
   }
