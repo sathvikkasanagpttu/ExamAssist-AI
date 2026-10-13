@@ -49,14 +49,17 @@ let currentProps: OverlayProps = {
   autoRunToken: 0
 };
 
-function formatDirectAnswer(directAnswer: unknown): string {
-  if (!directAnswer) return "";
-  if (typeof directAnswer === "string") return directAnswer;
-  if (typeof directAnswer === "object") {
-    const obj = directAnswer as { option?: string; text?: string };
-    return `${obj.option ? obj.option + ". " : ""}${obj.text || ""}`.trim();
+function formatDirectAnswer(directAnswer: unknown, fullResult?: Record<string, unknown> | null): string {
+  if (directAnswer) {
+    if (typeof directAnswer === "string" && directAnswer.trim()) return directAnswer.trim();
+    if (typeof directAnswer === "object") {
+      const obj = directAnswer as { option?: string; text?: string };
+      const formatted = `${obj.option ? obj.option + ". " : ""}${obj.text || ""}`.trim();
+      if (formatted) return formatted;
+    }
   }
-  return String(directAnswer);
+  const fallbackText = String(fullResult?.directAnswerText || fullResult?.ownSolution || "").trim();
+  return fallbackText;
 }
 
 function InPageOverlayApp(props: OverlayProps) {
@@ -290,7 +293,7 @@ function InPageOverlayApp(props: OverlayProps) {
     }
   }
 
-  const answerStr = result ? formatDirectAnswer(result.directAnswer) : "";
+  const answerStr = result ? formatDirectAnswer(result.directAnswer, result) : "";
   const confidence = String(result?.confidence || "UNVERIFIED");
 
   return (
@@ -641,12 +644,75 @@ function InPageOverlayApp(props: OverlayProps) {
                   </div>
                 ) : (
                   <div id="examai-solution-view">
-                    <div id="examai-direct-answer" style={{ fontWeight: 700, fontSize: "14px", color: "#38bdf8", marginBottom: "6px" }}>
+                    <div id="examai-direct-answer" style={{ fontWeight: 700, fontSize: "14px", color: "#38bdf8", marginBottom: "6px", whiteSpace: "pre-wrap" }}>
                       {answerStr}
                     </div>
-                    <div id="examai-explanation" style={{ fontSize: "12.5px", whiteSpace: "pre-wrap" }}>
+                    {typeof result.ownSolution === "string" &&
+                      result.ownSolution.trim() &&
+                      result.ownSolution.trim() !== answerStr &&
+                      result.ownSolution.trim() !== String(result.explanation || "").trim() && (
+                        <div
+                          id="examai-own-solution"
+                          style={{
+                            fontSize: "12.5px",
+                            whiteSpace: "pre-wrap",
+                            background: "rgba(15, 23, 42, 0.55)",
+                            padding: "8px",
+                            borderRadius: "6px",
+                            border: "1px solid rgba(148, 163, 184, 0.25)",
+                            marginBottom: "8px",
+                            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace"
+                          }}
+                        >
+                          {result.ownSolution}
+                        </div>
+                      )}
+                    <div id="examai-explanation" style={{ fontSize: "12.5px", whiteSpace: "pre-wrap", marginBottom: "6px" }}>
                       {String(result.explanation || "")}
                     </div>
+                    {Array.isArray(result.reasoningSteps) && result.reasoningSteps.length > 0 && (
+                      <div id="examai-reasoning-steps" style={{ fontSize: "12px", marginTop: "6px" }}>
+                        <strong style={{ color: "#94a3b8" }}>Reasoning Steps:</strong>
+                        <ol style={{ margin: "4px 0 0 18px", padding: 0 }}>
+                          {(result.reasoningSteps as string[]).map((step, idx) => (
+                            <li key={idx} style={{ marginBottom: "2px" }}>
+                              {String(step)}
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
+                    {Array.isArray(result.optionAnalysis) && result.optionAnalysis.length > 0 && (
+                      <div id="examai-option-analysis" style={{ fontSize: "12px", marginTop: "6px" }}>
+                        <strong style={{ color: "#94a3b8" }}>Option Analysis:</strong>
+                        <ul style={{ margin: "4px 0 0 16px", padding: 0 }}>
+                          {(
+                            result.optionAnalysis as Array<{
+                              option?: string;
+                              text?: string;
+                              correct?: boolean;
+                              isCorrect?: boolean;
+                              reason?: string;
+                              analysis?: string;
+                            }>
+                          ).map((opt, idx) => (
+                            <li key={idx} style={{ marginBottom: "2px" }}>
+                              <strong>
+                                {opt.option ? `${opt.option}. ` : ""}
+                                {opt.text || ""}
+                              </strong>{" "}
+                              {opt.correct || opt.isCorrect ? "✅ " : "❌ "}
+                              {opt.reason || opt.analysis || ""}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {typeof result.confidenceReason === "string" && result.confidenceReason.trim() && (
+                      <div id="examai-confidence-reason" style={{ fontSize: "11px", color: "#94a3b8", marginTop: "6px" }}>
+                        {result.confidenceReason}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

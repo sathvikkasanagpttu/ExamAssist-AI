@@ -7308,8 +7308,11 @@ ${code}`.toLowerCase();
   }
   const STAGE_LABELS = {
     classifying: "Classifying question & checking quality...",
-    solving: "Deriving first-principles solution...",
+    classified: "Classified question & checked quality...",
+    searching: "Searching verified sources & course notes...",
     retrieving: "Retrieving verified evidence & course notes...",
+    retrieved: "Retrieved supporting sources...",
+    solving: "Deriving first-principles solution...",
     verifying: "Verifying claims & checking option integrity...",
     complete: "Analysis complete."
   };
@@ -7340,6 +7343,12 @@ ${code}`.toLowerCase();
             label: STAGE_LABELS[payload.stage] || payload.stage,
             data: payload
           });
+        } else if (eventType && ["classifying", "classified", "searching", "retrieving", "retrieved", "solving", "verifying"].includes(eventType)) {
+          onProgress == null ? void 0 : onProgress({
+            stage: eventType,
+            label: STAGE_LABELS[eventType] || eventType,
+            data: payload
+          });
         } else if (eventType === "partial") {
           onProgress == null ? void 0 : onProgress({
             stage: "partial",
@@ -7347,11 +7356,13 @@ ${code}`.toLowerCase();
             data: payload
           });
         } else if (eventType === "error") {
-          const err = new Error(String(payload.error || "Streaming analysis failed."));
+          const err = new Error(
+            String(payload.message || payload.error || "Streaming analysis failed.")
+          );
           err.code = typeof payload.code === "string" ? payload.code : void 0;
           throw err;
         } else if (eventType === "done") {
-          finalResult = payload;
+          finalResult = payload.response && typeof payload.response === "object" ? payload.response : payload;
         }
       }
     }
@@ -8136,14 +8147,17 @@ ${code}`.toLowerCase();
     initialCaptured: null,
     autoRunToken: 0
   };
-  function formatDirectAnswer(directAnswer) {
-    if (!directAnswer) return "";
-    if (typeof directAnswer === "string") return directAnswer;
-    if (typeof directAnswer === "object") {
-      const obj = directAnswer;
-      return `${obj.option ? obj.option + ". " : ""}${obj.text || ""}`.trim();
+  function formatDirectAnswer(directAnswer, fullResult) {
+    if (directAnswer) {
+      if (typeof directAnswer === "string" && directAnswer.trim()) return directAnswer.trim();
+      if (typeof directAnswer === "object") {
+        const obj = directAnswer;
+        const formatted = `${obj.option ? obj.option + ". " : ""}${obj.text || ""}`.trim();
+        if (formatted) return formatted;
+      }
     }
-    return String(directAnswer);
+    const fallbackText = String((fullResult == null ? void 0 : fullResult.directAnswerText) || (fullResult == null ? void 0 : fullResult.ownSolution) || "").trim();
+    return fallbackText;
   }
   function InPageOverlayApp(props) {
     var _a2, _b, _c;
@@ -8345,7 +8359,7 @@ ${code}`.toLowerCase();
         setVisionLoading(false);
       }
     }
-    const answerStr = result ? formatDirectAnswer(result.directAnswer) : "";
+    const answerStr = result ? formatDirectAnswer(result.directAnswer, result) : "";
     const confidence = String((result == null ? void 0 : result.confidence) || "UNVERIFIED");
     return /* @__PURE__ */ u$1("div", { children: [
       selectingRegion && /* @__PURE__ */ u$1(
@@ -8693,8 +8707,42 @@ ${code}`.toLowerCase();
                 }
               ) })
             ] }) : /* @__PURE__ */ u$1("div", { id: "examai-solution-view", children: [
-              /* @__PURE__ */ u$1("div", { id: "examai-direct-answer", style: { fontWeight: 700, fontSize: "14px", color: "#38bdf8", marginBottom: "6px" }, children: answerStr }),
-              /* @__PURE__ */ u$1("div", { id: "examai-explanation", style: { fontSize: "12.5px", whiteSpace: "pre-wrap" }, children: String(result.explanation || "") })
+              /* @__PURE__ */ u$1("div", { id: "examai-direct-answer", style: { fontWeight: 700, fontSize: "14px", color: "#38bdf8", marginBottom: "6px", whiteSpace: "pre-wrap" }, children: answerStr }),
+              typeof result.ownSolution === "string" && result.ownSolution.trim() && result.ownSolution.trim() !== answerStr && result.ownSolution.trim() !== String(result.explanation || "").trim() && /* @__PURE__ */ u$1(
+                "div",
+                {
+                  id: "examai-own-solution",
+                  style: {
+                    fontSize: "12.5px",
+                    whiteSpace: "pre-wrap",
+                    background: "rgba(15, 23, 42, 0.55)",
+                    padding: "8px",
+                    borderRadius: "6px",
+                    border: "1px solid rgba(148, 163, 184, 0.25)",
+                    marginBottom: "8px",
+                    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace"
+                  },
+                  children: result.ownSolution
+                }
+              ),
+              /* @__PURE__ */ u$1("div", { id: "examai-explanation", style: { fontSize: "12.5px", whiteSpace: "pre-wrap", marginBottom: "6px" }, children: String(result.explanation || "") }),
+              Array.isArray(result.reasoningSteps) && result.reasoningSteps.length > 0 && /* @__PURE__ */ u$1("div", { id: "examai-reasoning-steps", style: { fontSize: "12px", marginTop: "6px" }, children: [
+                /* @__PURE__ */ u$1("strong", { style: { color: "#94a3b8" }, children: "Reasoning Steps:" }),
+                /* @__PURE__ */ u$1("ol", { style: { margin: "4px 0 0 18px", padding: 0 }, children: result.reasoningSteps.map((step, idx) => /* @__PURE__ */ u$1("li", { style: { marginBottom: "2px" }, children: String(step) }, idx)) })
+              ] }),
+              Array.isArray(result.optionAnalysis) && result.optionAnalysis.length > 0 && /* @__PURE__ */ u$1("div", { id: "examai-option-analysis", style: { fontSize: "12px", marginTop: "6px" }, children: [
+                /* @__PURE__ */ u$1("strong", { style: { color: "#94a3b8" }, children: "Option Analysis:" }),
+                /* @__PURE__ */ u$1("ul", { style: { margin: "4px 0 0 16px", padding: 0 }, children: result.optionAnalysis.map((opt, idx) => /* @__PURE__ */ u$1("li", { style: { marginBottom: "2px" }, children: [
+                  /* @__PURE__ */ u$1("strong", { children: [
+                    opt.option ? `${opt.option}. ` : "",
+                    opt.text || ""
+                  ] }),
+                  " ",
+                  opt.correct || opt.isCorrect ? "✅ " : "❌ ",
+                  opt.reason || opt.analysis || ""
+                ] }, idx)) })
+              ] }),
+              typeof result.confidenceReason === "string" && result.confidenceReason.trim() && /* @__PURE__ */ u$1("div", { id: "examai-confidence-reason", style: { fontSize: "11px", color: "#94a3b8", marginTop: "6px" }, children: result.confidenceReason })
             ] })
           ] })
         ] })

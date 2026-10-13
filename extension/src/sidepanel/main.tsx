@@ -550,6 +550,9 @@ function renderPerTestTable(runs: TestRunEntry[]): string {
       }
 
       if (statusEl) statusEl.textContent = `Completed (${data.confidence}). Hints unlocked at Level 1.`;
+      const targetTab = mode === "Authorized Assessment Mode" ? "hints" : "solution";
+      const targetBtn = document.querySelector(`.tab-btn[data-tab="${targetTab}"]`) as HTMLElement | null;
+      targetBtn?.click();
       await saveToHistory({ question: question.slice(0, 120), language, confidence: data.confidence });
     } catch (err) {
       const e = err as Error;

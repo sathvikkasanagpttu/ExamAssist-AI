@@ -90,8 +90,11 @@ export interface StreamProgressUpdate {
 
 const STAGE_LABELS: Record<string, string> = {
   classifying: "Classifying question & checking quality...",
-  solving: "Deriving first-principles solution...",
+  classified: "Classified question & checked quality...",
+  searching: "Searching verified sources & course notes...",
   retrieving: "Retrieving verified evidence & course notes...",
+  retrieved: "Retrieved supporting sources...",
+  solving: "Deriving first-principles solution...",
   verifying: "Verifying claims & checking option integrity...",
   complete: "Analysis complete."
 };
@@ -134,6 +137,15 @@ export async function readAssessmentStreamResponse(
           label: STAGE_LABELS[payload.stage] || payload.stage,
           data: payload
         });
+      } else if (
+        eventType &&
+        ["classifying", "classified", "searching", "retrieving", "retrieved", "solving", "verifying"].includes(eventType)
+      ) {
+        onProgress?.({
+          stage: eventType,
+          label: STAGE_LABELS[eventType] || eventType,
+          data: payload
+        });
       } else if (eventType === "partial") {
         onProgress?.({
           stage: "partial",
@@ -141,11 +153,16 @@ export async function readAssessmentStreamResponse(
           data: payload
         });
       } else if (eventType === "error") {
-        const err = new Error(String(payload.error || "Streaming analysis failed.")) as Error & { code?: string };
+        const err = new Error(
+          String(payload.message || payload.error || "Streaming analysis failed.")
+        ) as Error & { code?: string };
         err.code = typeof payload.code === "string" ? payload.code : undefined;
         throw err;
       } else if (eventType === "done") {
-        finalResult = payload;
+        finalResult =
+          payload.response && typeof payload.response === "object"
+            ? (payload.response as Record<string, unknown>)
+            : payload;
       }
     }
   }

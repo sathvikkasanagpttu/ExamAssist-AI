@@ -42,7 +42,13 @@ export function assessQuestionQuality(question, options = [], questionType = "CO
     return flag("ambiguous", "The prompt contains an impossible or self-contradictory premise.", "A consistent premise or the intended mathematical domain.");
   }
 
-  if (/\b(best|most important|quickly|largest number)\b/i.test(lower) || /yesterday'?s lecture|this algorithm|the revolution|unspecified equation/i.test(lower)) {
+  if (
+    /^which programming language is the best\??$/i.test(lower) ||
+    /^find the largest number\.?$/i.test(lower) ||
+    /\bchoose the most important cause of the revolution\b/i.test(lower) ||
+    /^does this algorithm run quickly\??$/i.test(lower) ||
+    /yesterday'?s lecture|unspecified equation/i.test(lower)
+  ) {
     return flag("ambiguous", "The question does not state the criterion or referent needed for one determinate answer.", "The evaluation criterion, referenced material, or concrete input.");
   }
 

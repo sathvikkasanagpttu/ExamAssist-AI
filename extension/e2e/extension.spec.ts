@@ -53,8 +53,8 @@ test.beforeAll(async () => {
         "Cache-Control": "no-cache",
         Connection: "keep-alive"
       });
-      res.write(`event: progress\ndata: ${JSON.stringify({ stage: "classifying" })}\n\n`);
-      res.write(`event: progress\ndata: ${JSON.stringify({ stage: "solving" })}\n\n`);
+      res.write(`event: classified\ndata: ${JSON.stringify({ questionType: "MCQ", subject: "Computer Science" })}\n\n`);
+      res.write(`event: solving\ndata: ${JSON.stringify({})}\n\n`);
 
       if (streamHoldMode) {
         // Keep stream open until client aborts
@@ -67,20 +67,22 @@ test.beforeAll(async () => {
       setTimeout(() => {
         res.write(
           `event: done\ndata: ${JSON.stringify({
-            question: "Mock analyzed question",
-            questionType: "MCQ",
-            subject: "Computer Science",
-            topic: "Algorithms",
-            difficulty: "Intermediate",
-            directAnswer: { option: "B", text: "O(log n)" },
-            confidence: "HIGH",
-            confidenceReason: "Balanced BST height is logarithmic.",
-            explanation: "An AVL tree maintains O(log n) height, so search takes O(log n) worst-case time.",
-            reasoningSteps: ["Check height balance property", "Conclude O(log n)"],
-            optionAnalysis: [],
-            verification: { status: "SUPPORTED", supported: [], conflicting: [], unsupported: [] },
-            sources: [],
-            retrievalTimestamp: new Date().toISOString()
+            response: {
+              question: "Mock analyzed question",
+              questionType: "MCQ",
+              subject: "Computer Science",
+              topic: "Algorithms",
+              difficulty: "Intermediate",
+              directAnswer: { option: "B", text: "O(log n)" },
+              confidence: "HIGH",
+              confidenceReason: "Balanced BST height is logarithmic.",
+              explanation: "An AVL tree maintains O(log n) height, so search takes O(log n) worst-case time.",
+              reasoningSteps: ["Check height balance property", "Conclude O(log n)"],
+              optionAnalysis: [],
+              verification: { status: "SUPPORTED", supported: [], conflicting: [], unsupported: [] },
+              sources: [],
+              retrievalTimestamp: new Date().toISOString()
+            }
           })}\n\n`
         );
         res.end();

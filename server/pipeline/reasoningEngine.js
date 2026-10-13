@@ -141,17 +141,34 @@ function coerceDirectAnswerShape(directAnswer, normalizedOptions) {
     };
   }
   if (typeof directAnswer === "string") {
-    const match = normalizedOptions.length > 0 ? directAnswer.match(/^([A-Z0-9])[\.\)\:\-\]]\s*(.*)$/i) : null;
-    if (match) {
-      return { option: match[1].toUpperCase(), text: match[2].trim() };
+    const trimmed = directAnswer.trim();
+    if (normalizedOptions.length > 0) {
+      const match = trimmed.match(/^(?:option\s+)?([A-Z0-9])(?:[\.\)\:\-\]]\s*(.*))?$/i);
+      if (match) {
+        const letter = match[1].toUpperCase();
+        const rest = (match[2] || "").trim();
+        const matchedOpt = normalizedOptions.find(o => o.option === letter);
+        if (matchedOpt) {
+          return { option: letter, text: rest || matchedOpt.text };
+        }
+        if (rest) {
+          return { option: letter, text: rest };
+        }
+      }
     }
-    return { option: "", text: directAnswer.trim() };
+    return { option: "", text: trimmed };
   }
   if (directAnswer && typeof directAnswer === "object") {
-    const optStr = String(directAnswer.option || "").trim();
+    const optStr = String(directAnswer.option || "").trim().replace(/^option\s+/i, "");
     if (normalizedOptions.length === 0 || /^(n\/a|none|null|-)$/i.test(optStr)) {
       return { ...directAnswer, option: "", text: String(directAnswer.text || "").trim() };
     }
+    const matchedOpt = normalizedOptions.find(o => o.option === optStr.toUpperCase());
+    return {
+      ...directAnswer,
+      option: optStr.toUpperCase(),
+      text: String(directAnswer.text || matchedOpt?.text || "").trim()
+    };
   }
   return directAnswer;
 }
@@ -201,6 +218,13 @@ async function runSingleSolverPass({
 
   // Normalize directAnswer
   let directAnswer = coerceDirectAnswerShape(parsed.directAnswer, normalizedOptions);
+  if (
+    normalizedOptions.length === 0 &&
+    (!directAnswer || (typeof directAnswer === "object" && !String(directAnswer.text || "").trim())) &&
+    parsed.ownSolution
+  ) {
+    directAnswer = { option: "", text: String(parsed.ownSolution).trim() };
+  }
 
   // Validate option integrity
   if (normalizedOptions.length > 0) {

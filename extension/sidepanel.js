@@ -6821,6 +6821,9 @@ Ranking & Trade-offs: ${((_k2 = data.ranking) == null ? void 0 : _k2.winnerReaso
           compOut.textContent = JSON.stringify(data.complexity || {}, null, 2);
         }
         if (statusEl) statusEl.textContent = `Completed (${data.confidence}). Hints unlocked at Level 1.`;
+        const targetTab = mode === "Authorized Assessment Mode" ? "hints" : "solution";
+        const targetBtn = document.querySelector(`.tab-btn[data-tab="${targetTab}"]`);
+        targetBtn == null ? void 0 : targetBtn.click();
         await saveToHistory({ question: question.slice(0, 120), language, confidence: data.confidence });
       } catch (err) {
         const e = err;
