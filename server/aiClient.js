@@ -100,12 +100,13 @@ export class AIClient {
     this.mockHandler = options.mockHandler || null;
     this.toolLoopHandler = options.toolLoopHandler || null;
     this.usageMetrics = options.usageMetrics || null;
+    this.activeWorkingModel = null;
 
     if (this.apiKey && this.apiKey !== "replace_me" && this.apiKey.trim().length > 0) {
       this.openai = new OpenAI({
         apiKey: this.apiKey,
         baseURL: this.baseURL,
-        maxRetries: 1
+        maxRetries: 0
       });
     } else {
       this.openai = null;
@@ -117,6 +118,30 @@ export class AIClient {
       (this.apiKey && this.apiKey !== "replace_me" && this.apiKey.trim().length > 0) ||
       this.mockHandler || this.toolLoopHandler
     );
+  }
+
+  _getCandidateModels(primaryModel = this.model) {
+    const modelsToTry = [];
+    if (this.activeWorkingModel) {
+      modelsToTry.push(this.activeWorkingModel);
+    }
+    if (primaryModel && !modelsToTry.includes(primaryModel)) {
+      modelsToTry.push(primaryModel);
+    }
+    if (this.baseURL?.includes("googleapis.com") || String(primaryModel || "").startsWith("gemini-")) {
+      const geminiFallbacks = [
+        "gemini-3.7-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-3.1-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-flash-latest"
+      ];
+      for (const fb of geminiFallbacks) {
+        if (!modelsToTry.includes(fb)) modelsToTry.push(fb);
+      }
+    }
+    return modelsToTry.length > 0 ? modelsToTry : [primaryModel || "gpt-4o"];
   }
 
   /**
@@ -176,21 +201,8 @@ export class AIClient {
       } catch {}
     }
 
-    // Build candidate models list for automatic fallback on 429 quota or 503 errors
-    const modelsToTry = [this.model];
-    if (this.baseURL?.includes("googleapis.com") || this.model.startsWith("gemini-")) {
-      const geminiFallbacks = [
-        "gemini-3.5-flash-lite",
-        "gemini-flash-latest"
-      ];
-      if (this.model === "gemini-3.5-flash-lite") {
-        modelsToTry.push("gemini-3.5-flash-lite", "gemini-3.5-flash-lite");
-      }
-      for (const fb of geminiFallbacks) {
-        if (!modelsToTry.includes(fb)) modelsToTry.push(fb);
-      }
-    }
-
+    // Build candidate models list for automatic fallback on 429 quota or 503/404 errors
+    const modelsToTry = this._getCandidateModels(this.model);
     let lastError = null;
 
     for (let i = 0; i < modelsToTry.length; i++) {
@@ -214,6 +226,7 @@ export class AIClient {
         if (typeof content !== "string") {
           throw new AIUnavailableError("Empty completion content received from AI provider");
         }
+        this.activeWorkingModel = currentModel;
         const usage = response.usage;
         if (this.usageMetrics) {
           if (usage?.total_tokens != null) this.usageMetrics.providerTokens += usage.total_tokens;
@@ -246,7 +259,12 @@ export class AIClient {
         if ((isRateLimit || isUnavailable) && hasNext) {
           console.warn(`[AIClient] Model ${currentModel} returned ${status || "error"} (${isRateLimit ? "rate limit / quota" : "unavailable"}). Falling back to ${modelsToTry[i + 1]}...`);
           lastError = err;
-          if (isRateLimit) await new Promise((r) => setTimeout(r, 2500 * (i + 1)));
+          if (this.activeWorkingModel === currentModel) {
+            this.activeWorkingModel = null;
+          }
+          if (isRateLimit && modelsToTry[i + 1] === currentModel) {
+            await new Promise((r) => setTimeout(r, 1500));
+          }
           continue;
         }
 
@@ -342,6 +360,7 @@ export class AIClient {
     }
 
     const visionModel = process.env.OPENAI_VISION_MODEL || this.model || "gpt-4o";
+    const candidateModels = this._getCandidateModels(visionModel);
     const messages = [
       { role: "system", content: systemPrompt || MASTER_SYSTEM_PROMPT },
       {
@@ -353,38 +372,57 @@ export class AIClient {
       }
     ];
 
-    try {
-      const response = await this.openai.chat.completions.create(
-        {
-          model: visionModel,
-          messages,
-          temperature,
-          response_format: { type: "json_object" }
-        },
-        {
-          signal: AbortSignal.timeout(timeoutMs)
+    let lastError = null;
+    for (let mIdx = 0; mIdx < candidateModels.length; mIdx++) {
+      const currentModel = candidateModels[mIdx];
+      try {
+        const response = await this.openai.chat.completions.create(
+          {
+            model: currentModel,
+            messages,
+            temperature,
+            response_format: { type: "json_object" }
+          },
+          {
+            signal: AbortSignal.timeout(timeoutMs)
+          }
+        );
+        const content = response.choices?.[0]?.message?.content;
+        if (typeof content !== "string") {
+          throw new AIUnavailableError("Empty vision completion content received from AI provider");
         }
-      );
-      const content = response.choices?.[0]?.message?.content;
-      if (typeof content !== "string") {
-        throw new AIUnavailableError("Empty vision completion content received from AI provider");
+        this.activeWorkingModel = currentModel;
+        return extractJsonFromText(content);
+      } catch (err) {
+        if (err instanceof AIError && !(err instanceof AIRateLimitError)) throw err;
+        lastError = err;
+        const msg = String(err.message || "").toLowerCase();
+        const status = err.status || err.statusCode;
+        if (status === 401 || status === 403 || msg.includes("invalid api key")) {
+          throw new AIConfigError(`Invalid API key: ${err.message}`);
+        }
+        const isRetryableModelErr =
+          status === 429 ||
+          status === 404 ||
+          status === 503 ||
+          msg.includes("rate limit") ||
+          msg.includes("quota") ||
+          msg.includes("429") ||
+          msg.includes("404") ||
+          msg.includes("not found");
+        if (isRetryableModelErr && mIdx + 1 < candidateModels.length) {
+          continue;
+        }
+        if (status === 429 || msg.includes("rate limit") || msg.includes("quota") || msg.includes("429")) {
+          throw new AIRateLimitError(err.message);
+        }
+        if (err.name === "AbortError" || err.name === "TimeoutError" || msg.includes("timeout")) {
+          throw new AITimeoutError(err.message);
+        }
+        throw new AIUnavailableError(err.message);
       }
-      return extractJsonFromText(content);
-    } catch (err) {
-      if (err instanceof AIError) throw err;
-      const msg = String(err.message || "").toLowerCase();
-      const status = err.status || err.statusCode;
-      if (status === 401 || status === 403 || msg.includes("invalid api key")) {
-        throw new AIConfigError(`Invalid API key: ${err.message}`);
-      }
-      if (status === 429 || msg.includes("rate limit") || msg.includes("quota")) {
-        throw new AIRateLimitError(err.message);
-      }
-      if (err.name === "AbortError" || err.name === "TimeoutError" || msg.includes("timeout")) {
-        throw new AITimeoutError(err.message);
-      }
-      throw new AIUnavailableError(err.message);
     }
+    throw new AIUnavailableError(lastError?.message || "All vision models failed");
   }
 
   /**
@@ -432,23 +470,25 @@ export class AIClient {
       if (totalCostUsd >= maxUsd) throw new AIBudgetError("Agent exceeded its USD budget");
 
       let response;
-      for (let attempt = 0; attempt < 3; attempt++) {
+      const candidateModels = this._getCandidateModels(this.model);
+      for (let mIdx = 0; mIdx < candidateModels.length; mIdx++) {
+        const currentModel = candidateModels[mIdx];
         try {
           response = await this.openai.chat.completions.create({
-            model: this.model,
+            model: currentModel,
             messages,
             tools,
             tool_choice: "auto",
             temperature: 0
           }, { signal: AbortSignal.timeout(Math.max(250, maxTotalMs - (Date.now() - startedAt))) });
+          this.activeWorkingModel = currentModel;
           break;
         } catch (error) {
           const message = String(error?.message || error);
           const status = error?.status || error?.statusCode;
           if (status === 401 || status === 403 || /invalid api key|incorrect api key/i.test(message)) throw new AIConfigError(`Invalid API key: ${message}`);
-          if (status === 429 || /rate limit|quota|429/i.test(message)) {
-            if (attempt < 2) {
-              await new Promise((r) => setTimeout(r, 2500 * (attempt + 1)));
+          if (status === 429 || status === 404 || status === 503 || /rate limit|quota|429|404|not found/i.test(message)) {
+            if (mIdx + 1 < candidateModels.length) {
               continue;
             }
             throw new AIRateLimitError(message);

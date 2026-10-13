@@ -8579,6 +8579,27 @@ ${code}`.toLowerCase();
               ]
             }
           ),
+          (visionMeta == null ? void 0 : visionMeta.requiresUserConfirmation) && /* @__PURE__ */ u$1("div", { id: "examai-low-ocr-banner", className: "examai-card", style: { borderColor: "#f59e0b" }, children: [
+            /* @__PURE__ */ u$1("strong", { style: { color: "#fbbf24" }, children: [
+              "⚠️ Low OCR Confidence (",
+              Math.round((visionMeta.ocrConfidence || 0) * 100),
+              "%)"
+            ] }),
+            /* @__PURE__ */ u$1("div", { style: { fontSize: "11px", color: "#cbd5e1", marginTop: "4px" }, children: "Please verify the extracted text below and click to re-solve if you made edits:" }),
+            /* @__PURE__ */ u$1(
+              "button",
+              {
+                id: "examai-confirm-ocr-btn",
+                className: "examai-btn primary",
+                style: { marginTop: "6px" },
+                onClick: () => {
+                  setVisionMeta({ ...visionMeta, requiresUserConfirmation: false });
+                  void runAnalyze();
+                },
+                children: "✅ Confirm & Re-Solve"
+              }
+            )
+          ] }),
           /* @__PURE__ */ u$1("div", { className: "examai-card", children: [
             /* @__PURE__ */ u$1("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px", gap: "4px", flexWrap: "wrap" }, children: [
               /* @__PURE__ */ u$1("strong", { style: { fontSize: "11px", color: "#94a3b8", textTransform: "uppercase" }, children: "Question (Upload, Capture, or Paste to Get Answer)" }),

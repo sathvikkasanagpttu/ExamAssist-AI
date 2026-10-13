@@ -521,6 +521,28 @@ function InPageOverlayApp(props: OverlayProps) {
               </div>
             )}
 
+            {visionMeta?.requiresUserConfirmation && (
+              <div id="examai-low-ocr-banner" className="examai-card" style={{ borderColor: "#f59e0b" }}>
+                <strong style={{ color: "#fbbf24" }}>
+                  ⚠️ Low OCR Confidence ({Math.round((visionMeta.ocrConfidence || 0) * 100)}%)
+                </strong>
+                <div style={{ fontSize: "11px", color: "#cbd5e1", marginTop: "4px" }}>
+                  Please verify the extracted text below and click to re-solve if you made edits:
+                </div>
+                <button
+                  id="examai-confirm-ocr-btn"
+                  className="examai-btn primary"
+                  style={{ marginTop: "6px" }}
+                  onClick={() => {
+                    setVisionMeta({ ...visionMeta, requiresUserConfirmation: false });
+                    void runAnalyze();
+                  }}
+                >
+                  ✅ Confirm & Re-Solve
+                </button>
+              </div>
+            )}
+
             <div className="examai-card">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px", gap: "4px", flexWrap: "wrap" }}>
                 <strong style={{ fontSize: "11px", color: "#94a3b8", textTransform: "uppercase" }}>
