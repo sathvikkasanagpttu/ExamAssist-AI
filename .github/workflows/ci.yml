@@ -55,9 +55,9 @@ jobs:
         working-directory: server
         run: npm run eval:code:smoke
 
-      - name: Install Playwright Browsers (Chrome)
+      - name: Install Playwright Browsers (Chromium)
         working-directory: extension
-        run: npx playwright install --with-deps chrome
+        run: npx playwright install --with-deps chromium
 
       - name: Playwright E2E Fixture Tests (Monaco, CodeMirror, Textarea, Moodle)
         working-directory: extension
