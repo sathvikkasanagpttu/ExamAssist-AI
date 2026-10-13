@@ -23,7 +23,7 @@ export function buildUserMessage({ question, text, options = [], type, questionT
   const evidence = Array.isArray(sources) && sources.length > 0
     ? sources.map((s, i) => {
       const label = s.type === "course_notes"
-        ? `COURSE NOTES: ${s.file || "User document"}${s.page == null ? "" : `, page ${s.page}`}`
+        ? `COURSE NOTES: ${s.doc || s.file || "User document"}${s.section ? ` — Section: ${s.section}` : ""}${s.page == null ? "" : `, page ${s.page}`}`
         : `${s.title || s.domain || "Source"} - ${s.url || ""}`;
       return `[${i + 1}] ${label}\n${s.snippet || ""}`;
     }).join("\n\n")

@@ -60,7 +60,8 @@ import {
   KnowledgeBaseError,
   listDocuments,
   ragEnabled,
-  searchKnowledgeBase
+  searchKnowledgeBase,
+  searchDocsAndNotes
 } from "./kb/knowledgeBase.js";
 
 const app = express();
@@ -213,6 +214,23 @@ app.delete("/api/kb/documents/:id", async (req, res) => {
 app.post("/api/kb/search", async (req, res) => {
   try {
     const result = await searchKnowledgeBase({ userId: localUserId(req), question: req.body?.question, debug: true });
+    res.json(result);
+  } catch (error) {
+    sendKnowledgeBaseError(res, error);
+  }
+});
+
+app.post("/api/kb/docs-search", async (req, res) => {
+  try {
+    const question = String(req.body?.question || "").trim();
+    if (!question) {
+      return res.status(400).json({ error: "A search question is required.", code: "KB_QUERY_REQUIRED" });
+    }
+    const result = await searchDocsAndNotes({
+      userId: localUserId(req),
+      question,
+      language: String(req.body?.language || "")
+    });
     res.json(result);
   } catch (error) {
     sendKnowledgeBaseError(res, error);

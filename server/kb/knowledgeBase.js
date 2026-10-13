@@ -7,6 +7,13 @@ import pg from "pg";
 import { defaultAIClient } from "../aiClient.js";
 import { chunkSections } from "./chunking.js";
 import { extractDocumentText } from "./extract.js";
+import {
+  OFFICIAL_DOCS_USER_ID,
+  OFFICIAL_LANGUAGE_DOCS,
+  searchOfficialLanguageDocs
+} from "./officialDocsCorpus.js";
+
+export { OFFICIAL_DOCS_USER_ID, OFFICIAL_LANGUAGE_DOCS, searchOfficialLanguageDocs };
 
 const { Pool } = pg;
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -199,31 +206,41 @@ async function rerankWithModel(question, candidates) {
   }
 }
 
-export async function searchKnowledgeBase({ userId, question, debug = false }) {
+export async function searchKnowledgeBase({
+  userId,
+  question,
+  includeOfficialDocs = false,
+  debug = false
+}) {
   await initializeKnowledgeBase();
   requireUser(userId);
   const query = String(question || "").trim();
   if (!query) throw new KnowledgeBaseError("KB_QUERY_REQUIRED", "A search question is required.", 400);
   const [queryVector] = await embedTexts([query]);
   const vectorLiteral = `[${queryVector.join(",")}]`;
+  const userIds = includeOfficialDocs ? [userId, OFFICIAL_DOCS_USER_ID] : [userId];
   const vectorRows = await pool.query(
     `SELECT c.id,c.text,c.page,c.section,d.file_name, (c.embedding <=> $1::vector) AS distance
      FROM kb_chunks c JOIN kb_documents d ON d.id=c.document_id
-     WHERE c.user_id=$2 AND c.embedding IS NOT NULL
-     ORDER BY c.embedding <=> $1::vector LIMIT 20`, [vectorLiteral, userId]
+     WHERE c.user_id = ANY($2::uuid[]) AND c.embedding IS NOT NULL
+     ORDER BY c.embedding <=> $1::vector LIMIT 20`, [vectorLiteral, userIds]
   );
   const textRows = await pool.query(
     `SELECT c.id,c.text,c.page,c.section,d.file_name, ts_rank_cd(c.search_vector, plainto_tsquery('english',$1)) AS text_rank
      FROM kb_chunks c JOIN kb_documents d ON d.id=c.document_id
-     WHERE c.user_id=$2 AND c.search_vector @@ plainto_tsquery('english',$1)
-     ORDER BY text_rank DESC LIMIT 20`, [query, userId]
+     WHERE c.user_id = ANY($2::uuid[]) AND c.search_vector @@ plainto_tsquery('english',$1)
+     ORDER BY text_rank DESC LIMIT 20`, [query, userIds]
   );
   const ranked = reciprocalRankFusion(vectorRows.rows, textRows.rows);
   const minimum = Number(process.env.KB_MIN_RELEVANCE_RRF || 0.014);
   const aboveThreshold = applyRelevanceThreshold(ranked, minimum);
+  if (!aboveThreshold.length) {
+    return { matches: [], threshold: minimum };
+  }
   const candidates = await rerankWithModel(query, aboveThreshold.slice(0, 10));
   const matches = candidates.slice(0, 5).map((candidate) => ({
     type: "course_notes",
+    doc: candidate.file_name,
     file: candidate.file_name,
     page: candidate.page == null ? null : Number(candidate.page),
     snippet: candidate.text,
@@ -232,3 +249,85 @@ export async function searchKnowledgeBase({ userId, question, debug = false }) {
   }));
   return { matches, threshold: minimum };
 }
+
+/**
+ * Indexes official language and library documentation (Python, cppreference, Java SE, MDN)
+ * into the pgvector KB under OFFICIAL_DOCS_USER_ID when Postgres + embeddings are available.
+ */
+export async function seedOfficialDocsInKnowledgeBase() {
+  const ready = await initializeKnowledgeBase();
+  if (!ready || !pool) {
+    return { indexed: 0, pgvectorEnabled: false, corpusSize: OFFICIAL_LANGUAGE_DOCS.length };
+  }
+  let indexed = 0;
+  for (const entry of OFFICIAL_LANGUAGE_DOCS) {
+    const markdown = `# ${entry.doc}\n## ${entry.section}\n\n${entry.text}\n`;
+    const buffer = Buffer.from(markdown, "utf8");
+    try {
+      const res = await ingestDocument({
+        userId: OFFICIAL_DOCS_USER_ID,
+        fileName: entry.file,
+        buffer
+      });
+      if (!res.duplicate) indexed++;
+    } catch {
+      // Ignore embedding or duplicate errors during background seed
+    }
+  }
+  return { indexed, pgvectorEnabled: true, corpusSize: OFFICIAL_LANGUAGE_DOCS.length };
+}
+
+/**
+ * Searches official language & library docs (Python, cppreference, Java SE, MDN)
+ * plus the user's pgvector course notes when available.
+ * Every returned item cites `doc` + `section`. Below relevance threshold returns `[]`.
+ */
+export async function searchDocsAndNotes({
+  userId = null,
+  question = "",
+  language = "",
+  minScore = Number(process.env.DOCS_RAG_MIN_SCORE || 0.22)
+} = {}) {
+  const q = String(question || "").trim();
+  if (!q) return { matches: [], threshold: minScore };
+
+  const official = searchOfficialLanguageDocs({
+    question: q,
+    language,
+    minScore
+  });
+
+  let userNotes = [];
+  if (userId && isValidLocalUserId(userId) && ragEnabled()) {
+    try {
+      const kbRes = await searchKnowledgeBase({
+        userId,
+        question: q,
+        includeOfficialDocs: true
+      });
+      userNotes = (kbRes.matches || []).map((m) => ({
+        ...m,
+        doc: m.doc || m.file || "Course Notes",
+        section: m.section || "General"
+      }));
+    } catch {
+      userNotes = [];
+    }
+  }
+
+  const combined = [...userNotes, ...official.matches];
+  const deduped = [];
+  const seen = new Set();
+  for (const item of combined) {
+    const key = `${item.doc || item.file}|${item.section || ""}|${(item.snippet || "").slice(0, 80)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(item);
+  }
+
+  return {
+    matches: deduped.slice(0, 6),
+    threshold: minScore
+  };
+}
+

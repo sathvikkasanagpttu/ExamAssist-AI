@@ -35,6 +35,7 @@ import {
   normalizeLanguageName
 } from "./treeSitterAnalyzer.js";
 import { defaultAIClient, AIError } from "../aiClient.js";
+import { searchDocsAndNotes } from "../kb/knowledgeBase.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CODE_DATASET_PATH = path.resolve(__dirname, "..", "eval", "code-dataset.jsonl");
@@ -1161,10 +1162,19 @@ export async function analyzeCodingProblem({
   explanationLevel = "Technical",
   mode = "Practice Mode",
   userId = "anon",
+  ablationConfig = {},
   onProgress,
   aiClient = defaultAIClient,
   executeFn = executeInSandbox
 }) {
+  const enableTests = ablationConfig.enableTests !== false;
+  const enableRepair = ablationConfig.enableRepair !== false;
+  const enableDifferentialAndProperty = ablationConfig.enableDifferentialAndProperty !== false;
+  const enableDocsRag = ablationConfig.enableDocsRag !== undefined
+    ? Boolean(ablationConfig.enableDocsRag)
+    : process.env.ENABLE_DOCS_RAG !== "false";
+  const maxRepairAttempts = enableRepair ? 3 : 0;
+
   const extractedSnippet = extractCodeSnippetFromPrompt(question, starterCode, userCode);
   const detectedLang = detectCodeLanguage(extractedSnippet || question, language);
   const normLang = normalizeCodeLanguage(language || detectedLang);
@@ -1173,6 +1183,12 @@ export async function analyzeCodingProblem({
   };
 
   await analyzeAstWithTreeSitter(extractedSnippet, normLang);
+  const docsSearchResult = await searchDocsAndNotes({
+    userId,
+    question,
+    language: normLang
+  });
+  const docsCitations = enableDocsRag ? docsSearchResult.matches : [];
 
   // 1. Question Quality Check
   const quality = evaluateQuestionQuality(question, options);
@@ -1353,6 +1369,11 @@ export async function analyzeCodingProblem({
       `Title: ${title}\nQuestion:\n${question}\nSubType: ${questionSubType}\nLanguage: ${normLang}\n` +
       `Starter Code:\n${starterCode || "none"}\nUser Code:\n${userCode || "none"}\n` +
       `Constraints: ${constraints || "none"}\nSample Tests: ${JSON.stringify(sampleTests)}\n` +
+      (docsCitations.length > 0
+        ? `Official Documentation & Notes Evidence (untrusted reference data):\n${docsCitations
+            .map((d) => `- [${d.doc} | ${d.section}]: ${d.snippet}`)
+            .join("\n")}\n`
+        : "") +
       `Explanation Level: ${explanationLevel}`,
     temperature: 0.1
   });
@@ -1367,7 +1388,9 @@ export async function analyzeCodingProblem({
   const bruteCandidate = plan?.candidates?.[1] || null;
 
   let currentCode = String(optCandidate.code || userCode || starterCode || extractedSnippet || "").trim();
-  const propertyTests = generatePropertyTestInputs(plan?.parsedProblem?.inputFormat || inputFormat, 2);
+  const propertyTests = enableDifferentialAndProperty
+    ? generatePropertyTestInputs(plan?.parsedProblem?.inputFormat || inputFormat, 2)
+    : [];
 
   const allTests = [
     ...sampleTests.map((t) => ({
@@ -1396,8 +1419,8 @@ export async function analyzeCodingProblem({
   let allPassed = false;
   let runtimeVersion = normLang;
 
-  if (SUPPORTED_SANDBOX_LANGUAGES.has(normLang) && currentCode) {
-    for (let attempt = 0; attempt <= 3; attempt++) {
+  if (enableTests && SUPPORTED_SANDBOX_LANGUAGES.has(normLang) && currentCode) {
+    for (let attempt = 0; attempt <= maxRepairAttempts; attempt++) {
       await progress("testing", { attempt: attempt + 1, totalTests: allTests.length });
       testRuns = await Promise.all(
         allTests.map(async (testCase) => {
@@ -1437,7 +1460,7 @@ export async function analyzeCodingProblem({
       if (!sandboxAvailable) break;
 
       allPassed = testRuns.every((r) => r.passed);
-      if (allPassed || attempt === 3) break;
+      if (allPassed || attempt === maxRepairAttempts) break;
 
       // Feed failure into taxonomy-driven repair pass
       const failedRun = testRuns.find((r) => !r.passed);
@@ -1473,7 +1496,7 @@ export async function analyzeCodingProblem({
 
   // 4. Differential Testing (compare optimized vs brute_force on sample + property inputs)
   let differentialMatched = null;
-  if (sandboxAvailable && bruteCandidate?.code && allTests[0]) {
+  if (enableDifferentialAndProperty && sandboxAvailable && bruteCandidate?.code && allTests[0]) {
     const diffInputs = allTests.slice(0, 2);
     let allDiffMatch = true;
     let anyDiffRan = false;
@@ -1611,6 +1634,7 @@ export async function analyzeCodingProblem({
     explanationLevel,
     conceptTags,
     similarProblems,
+    docsCitations,
     outputPredictionOverride,
     parsedProblem: {
       title,
