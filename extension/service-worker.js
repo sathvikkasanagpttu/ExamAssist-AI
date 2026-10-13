@@ -6158,6 +6158,11 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     language: string().max(40).optional().default("")
   });
   object({
+    imageDataUrl: string().min(16).max(6e6),
+    mimeType: string().max(40).optional().default(""),
+    hintContext: string().max(500).optional().default("")
+  });
+  object({
     question: string().min(3).max(25e3),
     options: array(any()).optional().default([])
   });
@@ -6300,6 +6305,9 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     }),
     object({
       type: literal("EXTRACT_CODING_PROBLEM")
+    }),
+    object({
+      type: literal("CAPTURE_VISIBLE_TAB")
     }),
     object({
       type: literal("OPEN_SIDE_PANEL"),
@@ -7228,10 +7236,23 @@ ${code}`.toLowerCase();
       }
     }
   });
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    var _a2;
     if ((message == null ? void 0 : message.type) === "OPEN_OPTIONS") {
       chrome.runtime.openOptionsPage();
       sendResponse({ ok: true });
+      return true;
+    }
+    if ((message == null ? void 0 : message.type) === "CAPTURE_VISIBLE_TAB") {
+      const windowId = ((_a2 = sender.tab) == null ? void 0 : _a2.windowId) ?? chrome.windows.WINDOW_ID_CURRENT;
+      chrome.tabs.captureVisibleTab(windowId, { format: "png" }, (dataUrl) => {
+        var _a3;
+        if (chrome.runtime.lastError || !dataUrl) {
+          sendResponse({ ok: false, error: ((_a3 = chrome.runtime.lastError) == null ? void 0 : _a3.message) || "captureVisibleTab failed" });
+        } else {
+          sendResponse({ ok: true, dataUrl });
+        }
+      });
       return true;
     }
     return false;

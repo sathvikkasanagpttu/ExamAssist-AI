@@ -6155,6 +6155,11 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     language: string().max(40).optional().default("")
   });
   object({
+    imageDataUrl: string().min(16).max(6e6),
+    mimeType: string().max(40).optional().default(""),
+    hintContext: string().max(500).optional().default("")
+  });
+  object({
     question: string().min(3).max(25e3),
     options: array(any()).optional().default([])
   });
@@ -6297,6 +6302,9 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     }),
     object({
       type: literal("EXTRACT_CODING_PROBLEM")
+    }),
+    object({
+      type: literal("CAPTURE_VISIBLE_TAB")
     }),
     object({
       type: literal("OPEN_SIDE_PANEL"),

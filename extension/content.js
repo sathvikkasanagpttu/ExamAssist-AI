@@ -6157,6 +6157,11 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     code: string().min(1).max(64e3),
     language: string().max(40).optional().default("")
   });
+  const VisionExtractRequestSchema = object({
+    imageDataUrl: string().min(16).max(6e6),
+    mimeType: string().max(40).optional().default(""),
+    hintContext: string().max(500).optional().default("")
+  });
   object({
     question: string().min(3).max(25e3),
     options: array(any()).optional().default([])
@@ -6300,6 +6305,9 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     }),
     object({
       type: literal("EXTRACT_CODING_PROBLEM")
+    }),
+    object({
+      type: literal("CAPTURE_VISIBLE_TAB")
     }),
     object({
       type: literal("OPEN_SIDE_PANEL"),
@@ -7295,6 +7303,9 @@ ${code}`.toLowerCase();
     }
     return { valid: true, message: parsed.data };
   }
+  function validateExtensionMessage(raw) {
+    return ExtensionMessageSchema.parse(raw);
+  }
   const STAGE_LABELS = {
     classifying: "Classifying question & checking quality...",
     solving: "Deriving first-principles solution...",
@@ -7398,6 +7409,79 @@ ${code}`.toLowerCase();
       level: Number(data.level || validated.level || 1),
       activeHint: String(data.activeHint || ""),
       hints: data.hints || {}
+    };
+  }
+  async function requestVisionExtraction(request, apiBase, signal) {
+    const validated = VisionExtractRequestSchema.parse(request);
+    const res = await fetch(`${apiBase.replace(/\/+$/, "")}/api/vision/extract`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal,
+      body: JSON.stringify(validated)
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      const err = new Error(String(data.error || `HTTP ${res.status}`));
+      err.code = typeof data.code === "string" ? data.code : void 0;
+      throw err;
+    }
+    return data;
+  }
+  async function captureAndCropVisibleRegion(rect) {
+    var _a2;
+    const w2 = Math.max(16, Math.round(rect.width));
+    const h2 = Math.max(16, Math.round(rect.height));
+    let rawTabDataUrl = null;
+    if (isExtensionContextAlive() && ((_a2 = chrome.runtime) == null ? void 0 : _a2.sendMessage)) {
+      try {
+        const msg = validateExtensionMessage({ type: "CAPTURE_VISIBLE_TAB" });
+        const response = await chrome.runtime.sendMessage(msg);
+        if ((response == null ? void 0 : response.ok) && typeof response.dataUrl === "string") {
+          rawTabDataUrl = response.dataUrl;
+        }
+      } catch {
+        rawTabDataUrl = null;
+      }
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = w2;
+    canvas.height = h2;
+    const ctx = canvas.getContext("2d");
+    if (rawTabDataUrl && ctx) {
+      await new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const dpr = window.devicePixelRatio || 1;
+          ctx.drawImage(
+            img,
+            Math.max(0, Math.round(rect.x * dpr)),
+            Math.max(0, Math.round(rect.y * dpr)),
+            Math.round(w2 * dpr),
+            Math.round(h2 * dpr),
+            0,
+            0,
+            w2,
+            h2
+          );
+          resolve();
+        };
+        img.onerror = () => resolve();
+        img.src = rawTabDataUrl;
+      });
+    } else if (ctx) {
+      ctx.fillStyle = "#0f172a";
+      ctx.fillRect(0, 0, w2, h2);
+      ctx.strokeStyle = "#38bdf8";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(1, 1, w2 - 2, h2 - 2);
+      ctx.fillStyle = "#e2e8f0";
+      ctx.font = "12px monospace";
+      ctx.fillText(`Captured Region (${w2}x${h2})`, 10, 22);
+    }
+    return {
+      croppedDataUrl: canvas.toDataURL("image/png"),
+      width: w2,
+      height: h2
     };
   }
   const DEFAULT_ALLOWED_SITES = [
@@ -8081,6 +8165,13 @@ ${code}`.toLowerCase();
     const [activeHintLevel, setActiveHintLevel] = d(null);
     const [hintLoading, setHintLoading] = d(false);
     const [copyStatus, setCopyStatus] = d("📋 Copy Answer");
+    const [selectingRegion, setSelectingRegion] = d(false);
+    const [dragStart, setDragStart] = d(null);
+    const [dragCurrent, setDragCurrent] = d(null);
+    const [visionPreview, setVisionPreview] = d(null);
+    const [visionLoading, setVisionLoading] = d(false);
+    const [visionMeta, setVisionMeta] = d(null);
+    const [lowOcrConfirmed, setLowOcrConfirmed] = d(true);
     h(() => {
       getStorageConfig({ theme: "dark", mode: "Practice Mode" }).then((cfg) => {
         if (cfg.theme === "light" || cfg.theme === "dark") setTheme(cfg.theme);
@@ -8105,6 +8196,13 @@ ${code}`.toLowerCase();
       }
     }, [props.autoRunToken, props.initialCaptured]);
     async function runAnalyze(qOverride, optsOverride, codeOverride) {
+      if ((visionMeta == null ? void 0 : visionMeta.requiresUserConfirmation) && !lowOcrConfirmed) {
+        setErrorState({
+          code: "LOW_OCR_CONFIDENCE_UNCONFIRMED",
+          message: "Low OCR confidence detected. Please review the extracted text and click 'Confirm Extracted Text' before analyzing."
+        });
+        return;
+      }
       const q2 = (qOverride !== void 0 ? qOverride : questionText).trim();
       const opts = optsOverride !== void 0 ? optsOverride : optionsText.split(/\r?\n/).map((l2) => l2.trim()).filter(Boolean);
       const code = codeOverride !== void 0 ? codeOverride : codeSnippet;
@@ -8199,9 +8297,146 @@ ${code}`.toLowerCase();
       if (extracted.starterCode) setCodeSnippet(extracted.starterCode);
       if (extracted.language) setLanguage(extracted.language);
     }
+    function handleStartRegionSelect() {
+      setErrorState(null);
+      setVisionPreview(null);
+      setVisionMeta(null);
+      setDragStart(null);
+      setDragCurrent(null);
+      setSelectingRegion(true);
+    }
+    async function handleFinishRegionSelect(start, end) {
+      setSelectingRegion(false);
+      setDragStart(null);
+      setDragCurrent(null);
+      const x2 = Math.min(start.x, end.x);
+      const y2 = Math.min(start.y, end.y);
+      const width = Math.max(24, Math.abs(end.x - start.x));
+      const height = Math.max(24, Math.abs(end.y - start.y));
+      const cropped = await captureAndCropVisibleRegion({ x: x2, y: y2, width, height });
+      setVisionPreview(cropped);
+    }
+    async function handleSendVisionPreview() {
+      var _a3;
+      if (!visionPreview) return;
+      setVisionLoading(true);
+      setErrorState(null);
+      try {
+        const apiBase = await getApiBaseUrl();
+        const res = await requestVisionExtraction(
+          {
+            imageDataUrl: visionPreview.croppedDataUrl,
+            mimeType: "image/png",
+            hintContext: document.title || ""
+          },
+          apiBase
+        );
+        setVisionMeta(res);
+        setVisionPreview(null);
+        if (res.extractedQuestion) setQuestionText(res.extractedQuestion);
+        if ((_a3 = res.extractedOptions) == null ? void 0 : _a3.length) setOptionsText(res.extractedOptions.join("\n"));
+        if (res.extractedCode) setCodeSnippet(res.extractedCode);
+        if (res.detectedLanguage) setLanguage(res.detectedLanguage);
+        setLowOcrConfirmed(!res.requiresUserConfirmation);
+      } catch (err) {
+        const e2 = err;
+        setErrorState({ code: e2.code || "VISION_ERROR", message: e2.message || "Vision extraction failed." });
+      } finally {
+        setVisionLoading(false);
+      }
+    }
     const answerStr = result ? formatDirectAnswer(result.directAnswer) : "";
     const confidence = String((result == null ? void 0 : result.confidence) || "UNVERIFIED");
     return /* @__PURE__ */ u$1("div", { children: [
+      selectingRegion && /* @__PURE__ */ u$1(
+        "div",
+        {
+          id: "examai-region-selector",
+          style: {
+            position: "fixed",
+            inset: 0,
+            zIndex: 2147483647,
+            background: "rgba(15, 23, 42, 0.35)",
+            cursor: "crosshair",
+            userSelect: "none"
+          },
+          onMouseDown: (e2) => {
+            e2.preventDefault();
+            e2.stopPropagation();
+            const pt = { x: e2.clientX, y: e2.clientY };
+            setDragStart(pt);
+            setDragCurrent(pt);
+          },
+          onMouseMove: (e2) => {
+            if (!dragStart) return;
+            e2.preventDefault();
+            setDragCurrent({ x: e2.clientX, y: e2.clientY });
+          },
+          onMouseUp: (e2) => {
+            e2.preventDefault();
+            e2.stopPropagation();
+            const start = dragStart || { x: Math.max(0, e2.clientX - 160), y: Math.max(0, e2.clientY - 90) };
+            const end = { x: e2.clientX, y: e2.clientY };
+            void handleFinishRegionSelect(start, end);
+          },
+          children: [
+            /* @__PURE__ */ u$1(
+              "div",
+              {
+                style: {
+                  position: "fixed",
+                  top: "14px",
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  background: "#0f172a",
+                  color: "#e2e8f0",
+                  border: "1px solid #38bdf8",
+                  borderRadius: "8px",
+                  padding: "6px 12px",
+                  fontSize: "12px",
+                  display: "flex",
+                  gap: "10px",
+                  alignItems: "center"
+                },
+                children: [
+                  /* @__PURE__ */ u$1("span", { children: "Drag a rectangle over the diagram, equation, table, or code to capture locally" }),
+                  /* @__PURE__ */ u$1(
+                    "button",
+                    {
+                      id: "examai-cancel-region-select",
+                      className: "examai-btn danger",
+                      onMouseDown: (e2) => e2.stopPropagation(),
+                      onClick: (e2) => {
+                        e2.stopPropagation();
+                        setSelectingRegion(false);
+                        setDragStart(null);
+                        setDragCurrent(null);
+                      },
+                      children: "Cancel"
+                    }
+                  )
+                ]
+              }
+            ),
+            dragStart && dragCurrent && /* @__PURE__ */ u$1(
+              "div",
+              {
+                id: "examai-region-box",
+                style: {
+                  position: "fixed",
+                  left: `${Math.min(dragStart.x, dragCurrent.x)}px`,
+                  top: `${Math.min(dragStart.y, dragCurrent.y)}px`,
+                  width: `${Math.max(4, Math.abs(dragCurrent.x - dragStart.x))}px`,
+                  height: `${Math.max(4, Math.abs(dragCurrent.y - dragStart.y))}px`,
+                  border: "2px dashed #38bdf8",
+                  background: "rgba(56, 189, 248, 0.14)",
+                  pointerEvents: "none"
+                }
+              }
+            )
+          ]
+        }
+      ),
       trigger.visible && trigger.captured && /* @__PURE__ */ u$1(
         "button",
         {
@@ -8267,10 +8502,99 @@ ${code}`.toLowerCase();
           ] })
         ] }),
         /* @__PURE__ */ u$1("div", { className: "examai-body", children: [
+          visionPreview && /* @__PURE__ */ u$1("div", { id: "examai-vision-preview-card", className: "examai-card", style: { borderColor: "#38bdf8" }, children: [
+            /* @__PURE__ */ u$1("strong", { style: { fontSize: "11px", color: "#38bdf8", textTransform: "uppercase", display: "block", marginBottom: "4px" }, children: [
+              "📷 Local Region Preview (",
+              visionPreview.width,
+              "×",
+              visionPreview.height,
+              "px)"
+            ] }),
+            /* @__PURE__ */ u$1("p", { style: { fontSize: "11px", color: "#94a3b8", margin: "0 0 6px 0" }, children: "Cropped locally in browser. Nothing leaves your browser until you click Send to OCR. Images are never stored or logged." }),
+            /* @__PURE__ */ u$1(
+              "img",
+              {
+                id: "examai-vision-preview-img",
+                src: visionPreview.croppedDataUrl,
+                alt: "Captured region preview",
+                style: { maxWidth: "100%", maxHeight: "140px", borderRadius: "6px", border: "1px solid #334155", display: "block", marginBottom: "8px" }
+              }
+            ),
+            /* @__PURE__ */ u$1("div", { style: { display: "flex", gap: "6px" }, children: [
+              /* @__PURE__ */ u$1(
+                "button",
+                {
+                  id: "examai-vision-send-btn",
+                  className: "examai-btn primary",
+                  disabled: visionLoading,
+                  onClick: () => void handleSendVisionPreview(),
+                  children: visionLoading ? "⏳ Extracting OCR..." : "📤 Send to OCR"
+                }
+              ),
+              /* @__PURE__ */ u$1(
+                "button",
+                {
+                  id: "examai-vision-cancel-btn",
+                  className: "examai-btn danger",
+                  disabled: visionLoading,
+                  onClick: () => setVisionPreview(null),
+                  children: "✕ Cancel"
+                }
+              )
+            ] })
+          ] }),
+          visionMeta && /* @__PURE__ */ u$1(
+            "div",
+            {
+              id: "examai-vision-meta-card",
+              className: "examai-card",
+              style: { borderColor: visionMeta.requiresUserConfirmation && !lowOcrConfirmed ? "#f59e0b" : "#10b981" },
+              children: [
+                /* @__PURE__ */ u$1("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
+                  /* @__PURE__ */ u$1("strong", { style: { fontSize: "11px", color: "#e2e8f0" }, children: [
+                    "OCR Confidence: ",
+                    Math.round(visionMeta.ocrConfidence * 100),
+                    "% (",
+                    visionMeta.ocrEngine,
+                    ")"
+                  ] }),
+                  /* @__PURE__ */ u$1("span", { style: { fontSize: "10px", color: "#94a3b8" }, children: "Image not stored" })
+                ] }),
+                visionMeta.diagramSummary && /* @__PURE__ */ u$1("div", { style: { fontSize: "11px", color: "#cbd5e1", marginTop: "4px" }, children: [
+                  "Diagram/Table: ",
+                  visionMeta.diagramSummary
+                ] }),
+                visionMeta.requiresUserConfirmation && !lowOcrConfirmed && /* @__PURE__ */ u$1("div", { id: "examai-low-ocr-banner", className: "examai-notice", style: { marginTop: "6px" }, children: [
+                  /* @__PURE__ */ u$1("strong", { children: [
+                    "⚠️ Low OCR Confidence (",
+                    Math.round(visionMeta.ocrConfidence * 100),
+                    "%):"
+                  ] }),
+                  " ",
+                  visionMeta.uncertaintyNotes || "Please review and edit the extracted text below, then confirm before analyzing.",
+                  /* @__PURE__ */ u$1("div", { style: { marginTop: "6px" }, children: /* @__PURE__ */ u$1(
+                    "button",
+                    {
+                      id: "examai-confirm-ocr-btn",
+                      className: "examai-btn primary",
+                      onClick: () => {
+                        setLowOcrConfirmed(true);
+                        setErrorState(null);
+                      },
+                      children: "✓ Confirm Extracted Text"
+                    }
+                  ) })
+                ] })
+              ]
+            }
+          ),
           /* @__PURE__ */ u$1("div", { className: "examai-card", children: [
-            /* @__PURE__ */ u$1("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }, children: [
+            /* @__PURE__ */ u$1("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px", gap: "4px", flexWrap: "wrap" }, children: [
               /* @__PURE__ */ u$1("strong", { style: { fontSize: "11px", color: "#94a3b8", textTransform: "uppercase" }, children: "Captured Question (Editable in Panel Only)" }),
-              /* @__PURE__ */ u$1("button", { id: "examai-extract-coding", className: "examai-btn", onClick: handleExtractPageCoding, children: "🔍 Extract Page" })
+              /* @__PURE__ */ u$1("div", { style: { display: "flex", gap: "4px" }, children: [
+                /* @__PURE__ */ u$1("button", { id: "examai-capture-region-btn", className: "examai-btn", onClick: handleStartRegionSelect, children: "📷 Capture Region" }),
+                /* @__PURE__ */ u$1("button", { id: "examai-extract-coding", className: "examai-btn", onClick: handleExtractPageCoding, children: "🔍 Extract Page" })
+              ] })
             ] }),
             /* @__PURE__ */ u$1(
               "textarea",
