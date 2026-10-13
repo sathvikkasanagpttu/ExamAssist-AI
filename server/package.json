@@ -11,6 +11,9 @@
     "eval": "node eval/runner.mjs",
     "eval:smoke": "node eval/runner.mjs --smoke --limit 10",
     "eval:gate": "node eval/gate.mjs",
+    "eval:code": "node eval/code-runner.mjs",
+    "eval:code:smoke": "node eval/code-runner.mjs --limit 12 --ablation 4_plus_diff_property",
+    "mcp": "node mcp/server.js",
     "pack": "node scripts/pack.mjs"
   },
   "dependencies": {

@@ -16,6 +16,7 @@ import { executeInSandbox, executeSqlInSandbox, executeSymbolic } from "./sandbo
 import { orchestrateSearch } from "./searchOrchestrator.js";
 import { ragEnabled, searchKnowledgeBase, searchDocsAndNotes } from "../kb/knowledgeBase.js";
 import { normalizeOptionsList, validateOptionIntegrity } from "./reasoningEngine.js";
+import { startToolSpan } from "./observabilityAndSafety.js";
 
 const tool = (name, description, parameters) => ({ type: "function", function: { name, description, parameters, strict: true } });
 
@@ -80,41 +81,54 @@ function toolEvidenceFromTrace(trace) {
 
 /** Execute one schema-validated tool call. Exported for focused tests. */
 export async function executeAgentTool(name, args, { questionType, userId, sources }) {
-  switch (name) {
-    case "web_search": {
-      const input = WebSearchToolArgsSchema.parse(args);
-      const found = await orchestrateSearch([input.query], input.maxResults, input.query, questionType);
-      sources.push(...found);
-      return { ok: true, data: { executed: true, success: true, sources: found } };
-    }
-    case "kb_search": {
-      const input = KnowledgeBaseSearchToolArgsSchema.parse(args);
-      const found = await searchDocsAndNotes({ userId, question: input.query });
-      const notes = (found.matches || []).map(courseNoteSource);
-      sources.push(...notes);
-      return { ok: true, data: { executed: true, success: true, sources: notes, threshold: found.threshold } };
-    }
-    case "calculator": {
-      const input = CalculatorToolArgsSchema.parse(args);
-      if (input.operation === "evaluate") {
-        const result = safeMathEvaluate(input.expression);
-        return result === null ? { ok: false, error: "Expression could not be evaluated" } : { ok: true, data: { executed: true, success: true, result } };
+  const toolSpan = startToolSpan(name, args);
+  try {
+    switch (name) {
+      case "web_search": {
+        const input = WebSearchToolArgsSchema.parse(args);
+        const found = await orchestrateSearch([input.query], input.maxResults, input.query, questionType);
+        sources.push(...found);
+        toolSpan.end("ok", { executed: true, resultsCount: found.length });
+        return { ok: true, data: { executed: true, success: true, sources: found } };
       }
-      const result = await executeSymbolic(input);
-      return { ok: Boolean(result.executed && result.success), data: result };
+      case "kb_search": {
+        const input = KnowledgeBaseSearchToolArgsSchema.parse(args);
+        const found = await searchDocsAndNotes({ userId, question: input.query });
+        const notes = (found.matches || []).map(courseNoteSource);
+        sources.push(...notes);
+        toolSpan.end("ok", { executed: true, resultsCount: notes.length });
+        return { ok: true, data: { executed: true, success: true, sources: notes, threshold: found.threshold } };
+      }
+      case "calculator": {
+        const input = CalculatorToolArgsSchema.parse(args);
+        if (input.operation === "evaluate") {
+          const result = safeMathEvaluate(input.expression);
+          toolSpan.end(result === null ? "error" : "ok", { executed: result !== null });
+          return result === null ? { ok: false, error: "Expression could not be evaluated" } : { ok: true, data: { executed: true, success: true, result } };
+        }
+        const result = await executeSymbolic(input);
+        toolSpan.end(result.executed && result.success ? "ok" : "error", { executed: Boolean(result.executed) });
+        return { ok: Boolean(result.executed && result.success), data: result };
+      }
+      case "run_code": {
+        const input = RunCodeToolArgsSchema.parse(args);
+        const result = await executeInSandbox(input);
+        toolSpan.end(result.executed && result.success ? "ok" : "error", { executed: Boolean(result.executed), language: input.language });
+        return { ok: Boolean(result.executed && result.success), data: { ...result, language: input.language } };
+      }
+      case "run_sql": {
+        const input = RunSqlToolArgsSchema.parse(args);
+        const result = await executeSqlInSandbox(input);
+        toolSpan.end(result.executed && result.success ? "ok" : "error", { executed: Boolean(result.executed) });
+        return { ok: Boolean(result.executed && result.success), data: result };
+      }
+      default:
+        toolSpan.end("error", { reason: "unknown_tool" });
+        return { ok: false, error: "Unknown tool" };
     }
-    case "run_code": {
-      const input = RunCodeToolArgsSchema.parse(args);
-      const result = await executeInSandbox(input);
-      return { ok: Boolean(result.executed && result.success), data: { ...result, language: input.language } };
-    }
-    case "run_sql": {
-      const input = RunSqlToolArgsSchema.parse(args);
-      const result = await executeSqlInSandbox(input);
-      return { ok: Boolean(result.executed && result.success), data: result };
-    }
-    default:
-      return { ok: false, error: "Unknown tool" };
+  } catch (err) {
+    toolSpan.end("error", { message: err?.message || "validation_error" });
+    throw err;
   }
 }
 

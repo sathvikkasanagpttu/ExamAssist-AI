@@ -224,8 +224,12 @@ export function generateCodeMutants(code = "", language = "python") {
   const mutationRules = [
     { name: "off_by_one_lt_to_lte", find: /(?<![=!<>])<(?![=<])/g, replace: "<=" },
     { name: "off_by_one_plus_to_minus", find: /\+\s*1\b/g, replace: "- 1" },
+    { name: "off_by_one_minus_to_plus", find: /-\s*1\b/g, replace: "+ 1" },
     { name: "equality_flip", find: /==/g, replace: "!=" },
+    { name: "inequality_flip", find: /!=/g, replace: "==" },
     { name: "arithmetic_add_to_sub", find: /(?<![+])\+ (?![+=])/g, replace: "- " },
+    { name: "arithmetic_sub_to_add", find: /(?<![-\s])- (?![-=])/g, replace: "+ " },
+    { name: "compact_sub_to_add", find: /([a-zA-Z0-9_\]])\s*-\s*([a-zA-Z_][a-zA-Z0-9_]*)/g, replace: "$1 + $2" },
     { name: "boolean_true_to_false", find: /\b(True|true)\b/g, replace: language === "python" ? "False" : "false" }
   ];
 
@@ -234,9 +238,10 @@ export function generateCodeMutants(code = "", language = "python") {
     rule.find.lastIndex = 0;
     const match = rule.find.exec(src);
     if (match) {
+      const replacement = match[0].replace(new RegExp(rule.find.source), rule.replace);
       const mutated =
         src.slice(0, match.index) +
-        rule.replace +
+        replacement +
         src.slice(match.index + match[0].length);
       if (mutated !== src) {
         mutants.push({

@@ -46,6 +46,7 @@ import {
   scrubSecretsAndPII,
   startSpan,
   getRecentSpans,
+  isLocalhostRequest,
   isSemanticCacheEnabled,
   computeProblemCacheKey,
   getVerifiedCachedResult,
@@ -867,9 +868,18 @@ app.post("/api/vision/extract", async (req, res) => {
 /**
  * GET /api/traces - Localhost-only redacted trace viewer
  */
-app.get("/api/traces", (_req, res) => {
+app.get("/api/traces", (req, res) => {
+  if (!isLocalhostRequest(req)) {
+    return res.status(403).json({
+      error: "Trace viewer is restricted to localhost only.",
+      code: "TRACE_VIEWER_LOCALHOST_ONLY"
+    });
+  }
   res.json({
     semanticCacheEnabled: isSemanticCacheEnabled(),
+    otlpExporterConfigured: Boolean(process.env.OTEL_EXPORTER_OTLP_ENDPOINT),
+    langfuseExporterConfigured: Boolean(process.env.LANGFUSE_PUBLIC_KEY && process.env.LANGFUSE_SECRET_KEY),
+    redactedByDefault: process.env.OTEL_REDACT_CODE_AND_QUESTIONS !== "false",
     spans: getRecentSpans(50)
   });
 });

@@ -1,0 +1,68 @@
+name: ExamAssist AI Quality & Security Gate
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+
+jobs:
+  ci:
+    name: Lint, Typecheck, Unit, Adapter Fixtures, Smoke Eval, Playwright E2E & Clean Zip
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Server dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Install Extension dependencies
+        working-directory: extension
+        run: npm ci
+
+      - name: Server Lint (syntax + repository hygiene)
+        working-directory: server
+        run: npm run lint
+
+      - name: Extension TypeScript Typecheck & Bundle Build
+        working-directory: extension
+        run: |
+          npm run typecheck
+          npm run build
+
+      - name: Extension Adapter Fixture Tests (Vitest + jsdom)
+        working-directory: extension
+        run: npm test
+
+      - name: Server Unit & Integration Tests
+        working-directory: server
+        run: npm test
+
+      - name: Smoke Evaluation (Mocked AI)
+        working-directory: server
+        run: npm run eval:smoke
+
+      - name: Coding Smoke Evaluation & Red-Team Suite
+        working-directory: server
+        run: npm run eval:code:smoke
+
+      - name: Install Playwright Browsers (Chrome)
+        working-directory: extension
+        run: npx playwright install --with-deps chrome
+
+      - name: Playwright E2E Fixture Tests (Monaco, CodeMirror, Textarea, Moodle)
+        working-directory: extension
+        run: npm run test:e2e
+
+      - name: Clean Zip Packaging Check (no secrets, .env, node_modules, logs, or .DS_Store)
+        working-directory: server
+        run: npm run pack
