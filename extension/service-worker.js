@@ -6280,6 +6280,14 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       unsupported: array(string())
     }),
     sources: array(SourceItemSchema),
+    graphContext: object({
+      matchedConcepts: array(any()).optional().default([]),
+      prerequisites: array(any()).optional().default([]),
+      relatedConcepts: array(any()).optional().default([]),
+      formulas: array(any()).optional().default([]),
+      pitfalls: array(any()).optional().default([]),
+      explanationContext: string().optional().default("")
+    }).optional(),
     retrievalTimestamp: string()
   });
   const ExtractedQuestionPayloadSchema = object({

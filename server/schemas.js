@@ -338,6 +338,14 @@ export const AssessmentResponseSchema = z.object({
     unsupported: z.array(z.string())
   }),
   sources: z.array(SourceItemSchema),
+  graphContext: z.object({
+    matchedConcepts: z.array(z.any()).optional().default([]),
+    prerequisites: z.array(z.any()).optional().default([]),
+    relatedConcepts: z.array(z.any()).optional().default([]),
+    formulas: z.array(z.any()).optional().default([]),
+    pitfalls: z.array(z.any()).optional().default([]),
+    explanationContext: z.string().optional().default("")
+  }).optional(),
   retrievalTimestamp: z.string()
 });
 

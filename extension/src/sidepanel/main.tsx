@@ -14,7 +14,9 @@ import {
   getApiBaseUrl,
   requestCodingAnalysis,
   requestCodingDebug,
-  requestCodingHint
+  requestCodingHint,
+  requestGraphTraverse,
+  requestRecruiterBenchmarks
 } from "../messaging";
 import type { ExplanationLevel } from "@examassist/shared";
 
@@ -633,6 +635,75 @@ function renderPerTestTable(runs: TestRunEntry[]): string {
       const e = err as Error;
       out.textContent = `Debug error: ${e.message}`;
     }
+  });
+
+  // --- 7. Graph & Recruiter Showcase Event Handlers ---
+  document.getElementById("sp-run-graph")?.addEventListener("click", async () => {
+    const question =
+      (document.getElementById("sp-question") as HTMLTextAreaElement | null)?.value.trim() ||
+      "Explain Dijkstra algorithm and shortest path";
+    const out = document.getElementById("sp-graph-output");
+    if (!out) return;
+    out.textContent = "Traversing Academic Knowledge Graph...";
+    try {
+      const apiBase = await getApiBaseUrl();
+      const res = (await requestGraphTraverse(question, apiBase)) as unknown as {
+        matchedConcepts?: Array<{ name: string; definition: string }>;
+        prerequisites?: Array<{ name: string; definition: string; depth: number }>;
+        formulas?: Array<{ name: string; expression: string; variables: string[] }>;
+        pitfalls?: Array<{ misconception: string; correction: string }>;
+      };
+
+      const parts: string[] = [];
+      if (res.matchedConcepts && res.matchedConcepts.length > 0) {
+        parts.push(`🎯 Target Concepts:\n${res.matchedConcepts.map((c) => `  • ${c.name}: ${c.definition}`).join("\n")}`);
+      }
+      if (res.prerequisites && res.prerequisites.length > 0) {
+        parts.push(`\n📚 Prerequisite DAG (Foundational Knowledge):\n${res.prerequisites.map((p) => `  [L${p.depth}] ${p.name} — ${p.definition}`).join("\n")}`);
+      }
+      if (res.formulas && res.formulas.length > 0) {
+        parts.push(`\n📐 Linked Formulas:\n${res.formulas.map((f) => `  • ${f.name}: ${f.expression}\n    Variables: ${f.variables.join(", ")}`).join("\n")}`);
+      }
+      if (res.pitfalls && res.pitfalls.length > 0) {
+        parts.push(`\n⚠️ Common Conceptual Pitfalls:\n${res.pitfalls.map((pit) => `  • Traps: "${pit.misconception}"\n    Correction: ${pit.correction}`).join("\n")}`);
+      }
+
+      out.textContent = parts.length > 0 ? parts.join("\n") : "No specific knowledge graph concepts matched for this query.";
+    } catch (err) {
+      const e = err as Error;
+      out.textContent = `Graph traversal error: ${e.message}`;
+    }
+  });
+
+  document.querySelectorAll(".benchmark-btn").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      const target = e.currentTarget as HTMLElement | null;
+      const bmId = target?.getAttribute("data-bm");
+      const out = document.getElementById("sp-benchmark-result");
+      if (!out || !bmId) return;
+
+      out.style.display = "block";
+      out.textContent = `Loading benchmark [${bmId}]...`;
+      try {
+        const apiBase = await getApiBaseUrl();
+        const data = (await requestRecruiterBenchmarks(apiBase)) as unknown as {
+          benchmarks?: Array<{ id: string; title: string; category: string; description: string; samplePayload: Record<string, unknown> }>;
+        };
+        const found = data.benchmarks?.find((b) => b.id === bmId);
+        if (found) {
+          out.textContent =
+            `🌟 Benchmark: ${found.title}\n` +
+            `Category: ${found.category}\n` +
+            `Description: ${found.description}\n\n` +
+            `Verified Payload:\n${JSON.stringify(found.samplePayload, null, 2)}`;
+        } else {
+          out.textContent = `Benchmark ${bmId} loaded successfully.`;
+        }
+      } catch (err) {
+        const errObj = err as Error;
+        out.textContent = `Benchmark fetch error: ${errObj.message}`;
+      }
+    });
   });
 
   document.getElementById("sp-clear-history")?.addEventListener("click", () => {

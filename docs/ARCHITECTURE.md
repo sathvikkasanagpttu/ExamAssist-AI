@@ -67,6 +67,13 @@ flowchart TD
    - `visionExtractor.js`: 4MB size cap, MIME + magic-byte validation, in-memory Tesseract OCR + multimodal Vision LLM, `ocrConfidence` calculation, and zero image persistence (`imagePersisted: false`).
    - `observabilityAndSafety.js`: W3C OpenTelemetry stage/tool spans, default code/question redaction, OTLP & Langfuse exporters, and localhost-only trace viewer.
 4. **`/server/kb/`**:
+   - `graphRAG.js`: Academic concept knowledge graph and prerequisite DAG (BFS traversal, multi-hop dependency resolution, formula variable grounding, and misconception/pitfall warnings). Backed by in-memory ontology and PostgreSQL migration `002_knowledge_graph.sql`.
    - `officialDocsCorpus.js` & `knowledgeBase.js`: Curated official language reference chunks (Python 3, cppreference C/C++, Java SE, MDN JS) + `pgvector` user course notes with `doc` + `section` citations and strict relevance threshold (`[]` below threshold).
-5. **`/server/mcp/server.js`**:
+5. **`/server/pipeline/` (Agents, Reranking & Orchestration)**:
+   - `reranker.js`: Evidence-First Reranker utilizing lexical BM25 term saturation, institutional domain authority (.edu, .gov, RFC, official docs vs forums), Reciprocal Rank Fusion (RRF $k=60$), claim-level sentence extraction, and contradiction detection.
+   - `agentRouter.js`: Typed multi-agent architecture with bounded specialist subagents (QuestionRouter, ResearchAgent, MathAgent, ProgrammingAgent, SQLAgent, KnowledgeAgent, VerificationAgent, ResponseComposer) routing tasks to task-specific execution workflows.
+   - `assessmentOrchestrator.js`: End-to-end academic assessment orchestrator integrating AST parsing, GraphRAG prerequisite context, domain-authoritative evidence reranking, and deterministic verification.
+6. **`/server/mcp/server.js` & Recruiter Demo API**:
    - Optional Model Context Protocol (MCP) JSON-RPC 2.0 server exposing `run_code`, `run_tests`, and `kb_search` without accuracy claims.
+   - `/api/demo/benchmarks`: Reproducible verification benchmark suite (GraphRAG, MathJS, Docker Sandbox, Vision OCR, Contradiction Detection) exposed to the Chrome Extension Side Panel `Graph & Showcase` tab.
+

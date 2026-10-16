@@ -65,6 +65,7 @@ import {
   searchKnowledgeBase,
   searchDocsAndNotes
 } from "./kb/knowledgeBase.js";
+import { defaultKnowledgeGraph, compareRagVsGraphRag } from "./kb/graphRAG.js";
 
 const app = express();
 
@@ -253,6 +254,101 @@ app.get("/api/config", (_req, res) => {
     modes: ["Practice Mode", "Authorized Assessment Mode"],
     maxQuestionLength: 25000,
     rateLimitPerMinute: 120
+  });
+});
+
+/**
+ * POST /api/graph/traverse - GraphRAG Concept & Prerequisite Traversal
+ */
+app.post("/api/graph/traverse", (req, res) => {
+  const question = String(req.body?.question || req.body?.text || "").trim();
+  if (!question) {
+    return res.status(400).json({ error: "A question string is required for graph traversal." });
+  }
+  const maxDepth = Number(req.body?.maxDepth || 2);
+  const result = defaultKnowledgeGraph.traverseGraphForQuestion(question, { maxDepth });
+  res.json({
+    status: "ok",
+    question,
+    ...result
+  });
+});
+
+/**
+ * GET /api/graph/compare - Comparative benchmark of standard RAG vs GraphRAG
+ */
+app.get("/api/graph/compare", (req, res) => {
+  const rawQ = req.query?.question || (req.url && req.url.includes("?") ? new URLSearchParams(req.url.split("?")[1]).get("question") : "") || "Explain Bayes Theorem and how to calculate posterior probability";
+  const question = decodeURIComponent(String(rawQ).replace(/\+/g, " ")).trim();
+  const comparison = compareRagVsGraphRag(question);
+  res.json({
+    status: "ok",
+    ...comparison
+  });
+});
+
+/**
+ * GET /api/demo/benchmarks - Recruiter Benchmark Showcase Scenarios
+ */
+app.get("/api/demo/benchmarks", (_req, res) => {
+  res.json({
+    status: "ok",
+    suiteName: "ExamAssist AI Professional Showcase & Recruiter Suite",
+    version: APP_VERSION,
+    benchmarks: [
+      {
+        id: "bm_multimodal_vision",
+        category: "Multimodal Question Understanding",
+        title: "Diagram & OCR Parsing: Binary Search Tree",
+        description: "Tests automated OCR fallback and image validation for diagram-heavy assessments.",
+        samplePayload: {
+          question: "Given a Binary Search Tree with root 10, left child 5, right child 15, what is the inorder traversal?",
+          options: ["A) 15, 10, 5", "B) 5, 10, 15", "C) 10, 5, 15", "D) 5, 15, 10"],
+          diagramType: "tree_diagram"
+        }
+      },
+      {
+        id: "bm_code_sandbox",
+        category: "Secure Code Execution & Edge Cases",
+        title: "Algorithmic Verification: Two Sum",
+        description: "Runs generated Python/C++ code against 5+ hidden test cases in an isolated Docker sandbox.",
+        samplePayload: {
+          language: "python",
+          question: "Given an array of integers nums and an integer target, return indices of the two numbers such that they add up to target.",
+          sampleTests: [{ stdin: "4\n2 7 11 15\n9", expectedOutput: "0 1" }]
+        }
+      },
+      {
+        id: "bm_math_deterministic",
+        category: "Deterministic Mathematics",
+        title: "Exact Calculation: Bayes' Posterior Probability",
+        description: "Evaluates exact numerical formulas using MathJS without LLM arithmetic hallucination.",
+        samplePayload: {
+          question: "Calculate the posterior probability P(A|B) given P(A) = 0.01, P(B|A) = 0.99, P(B|not A) = 0.05.",
+          mathFormula: "P(A|B) = (0.99 * 0.01) / (0.99 * 0.01 + 0.05 * 0.99)"
+        }
+      },
+      {
+        id: "bm_contradiction_detection",
+        category: "Source Verification & Conflict Detection",
+        title: "Contradiction Flagging: Time Complexity Disagreement",
+        description: "Flags conflicting academic claims and labels confidence as UNVERIFIED or LOW.",
+        samplePayload: {
+          question: "Is Dijkstra's algorithm guaranteed to terminate on graphs with negative cycles?",
+          options: ["A) Yes, always", "B) No, it may loop indefinitely", "C) Only in directed graphs", "D) Only in DAGs"]
+        }
+      },
+      {
+        id: "bm_graph_rag",
+        category: "GraphRAG & Concept Prerequisite Traversal",
+        title: "Knowledge Graph Traversal: Dijkstra's Algorithm",
+        description: "Traverses concept DAG to retrieve foundational prerequisites, related theorems, and common pitfalls.",
+        samplePayload: {
+          question: "Explain Dijkstra's shortest path algorithm, its prerequisites, and limitations.",
+          targetConcept: "dijkstra"
+        }
+      }
+    ]
   });
 });
 

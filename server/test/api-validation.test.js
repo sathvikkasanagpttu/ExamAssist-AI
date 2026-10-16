@@ -212,3 +212,50 @@ test("API: POST /api/assessment/analyze returns response strictly conforming to 
   assert.ok(Array.isArray(data.sources));
   assert.ok(data.retrievalTimestamp);
 });
+
+test("API: POST /api/graph/traverse extracts concepts and prerequisite DAG", async () => {
+  const res = await dispatchRequest(app, {
+    method: "POST",
+    url: "/api/graph/traverse",
+    body: {
+      question: "Explain how Dijkstra's algorithm finds shortest paths in a weighted graph"
+    }
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.status, "ok");
+  assert.ok(Array.isArray(res.body.matchedConcepts));
+  assert.ok(res.body.matchedConcepts.some((c) => c.name.includes("Dijkstra")));
+  assert.ok(Array.isArray(res.body.prerequisites));
+  assert.ok(Array.isArray(res.body.pitfalls));
+  assert.ok(typeof res.body.explanationContext === "string");
+});
+
+test("API: GET /api/graph/compare computes comparative delta metrics", async () => {
+  const res = await dispatchRequest(app, {
+    method: "GET",
+    url: "/api/graph/compare?question=Explain+Bayes+Theorem"
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.status, "ok");
+  assert.ok(res.body.plainRag);
+  assert.ok(res.body.graphRag);
+  assert.ok(res.body.deltaBenefit);
+  assert.ok(res.body.deltaBenefit.formulaVariablesGrounded > 0);
+});
+
+test("API: GET /api/demo/benchmarks returns 5 showcase benchmark cases", async () => {
+  const res = await dispatchRequest(app, {
+    method: "GET",
+    url: "/api/demo/benchmarks"
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.status, "ok");
+  assert.ok(Array.isArray(res.body.benchmarks));
+  assert.equal(res.body.benchmarks.length, 5);
+  const ids = res.body.benchmarks.map((b) => b.id);
+  assert.ok(ids.includes("bm_multimodal_vision"));
+  assert.ok(ids.includes("bm_code_sandbox"));
+  assert.ok(ids.includes("bm_math_deterministic"));
+  assert.ok(ids.includes("bm_contradiction_detection"));
+  assert.ok(ids.includes("bm_graph_rag"));
+});

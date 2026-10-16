@@ -9,6 +9,8 @@
 [![Chrome MV3](https://img.shields.io/badge/Chrome_Extension-Manifest_V3-38bdf8?style=for-the-badge&logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/)
 [![Preact + Tailwind](https://img.shields.io/badge/UI-Preact_%2B_Tailwind_in_Shadow_DOM-6366f1?style=for-the-badge&logo=preact&logoColor=white)](https://preactjs.com/)
 [![Hybrid RAG](https://img.shields.io/badge/Hybrid_RAG-pgvector_%2B_RRF-a855f7?style=for-the-badge&logo=postgresql&logoColor=white)](#-private-course-notes-rag-knowledge-base)
+[![GraphRAG](https://img.shields.io/badge/GraphRAG-Prerequisite_DAG-8b5cf6?style=for-the-badge)](#-graphrag--academic-knowledge-graphs)
+[![Agentic AI](https://img.shields.io/badge/Agentic_AI-8_Specialized_Agents-f43f5e?style=for-the-badge)](#-agentic-ai--specialized-agent-routing)
 [![Tool Sandbox](https://img.shields.io/badge/Sandbox-Docker_%7C_SQLite_%7C_SymPy-f59e0b?style=for-the-badge&logo=docker&logoColor=white)](#-specialized-solver-matrix--execution-sandbox)
 [![Evaluation Harness](https://img.shields.io/badge/Eval_Suite-236_Academic_%7C_185_Coding-ec4899?style=for-the-badge)](server/eval/dataset.jsonl)
 [![Model Resilience](https://img.shields.io/badge/AI_Engine-OpenAI_%26_Gemini_Flash_Auto--Fallback-06b6d4?style=for-the-badge)](#-automatic-gemini--openai-model-resilience)
@@ -180,6 +182,59 @@ The backend AI client ([`server/aiClient.js`](server/aiClient.js)) features buil
   $$\text{gemini-3.7-flash} \longrightarrow \text{gemini-3.6-flash} \longrightarrow \text{gemini-3.5-flash} \longrightarrow \text{gemini-3.1-flash-lite} \longrightarrow \text{gemini-3.5-flash-lite}$$
 - **Working Model Persistence**: Once a working model is discovered, the client caches it in memory as `activeWorkingModel`, sending all subsequent requests directly to that model without incurring retry delays.
 - **Full Vision & Tool Fallback**: Fallback logic is mirrored across text completion, multimodal vision extraction (`generateVisionJson`), and agentic tool loops (`runToolLoop`).
+
+---
+
+## 🌐 GraphRAG & Academic Knowledge Graphs
+
+ExamAssist AI bridges traditional similarity retrieval with structured relational knowledge via **GraphRAG** ([`server/kb/graphRAG.js`](server/kb/graphRAG.js)):
+
+1. **Prerequisite DAG BFS Traversal**: Concepts in Computer Science, Discrete Math, Statistics, Algorithms, and Databases are organized in an acyclic prerequisite graph. When a student questions a complex concept (e.g. *Dijkstra's Algorithm*), the engine traverses up to depth $d$ to retrieve necessary foundational concepts (*Graph Theory*, *Priority Queue*, *Breadth-First Search*).
+2. **Formula-to-Variable Grounding**: Mathematical concepts map to explicit formulas with strictly typed variable descriptions (e.g., *Bayes' Theorem*: $P(A|B) = \frac{P(B|A)P(A)}{P(B)}$ with $P(A)$ prior, $P(B|A)$ likelihood).
+3. **Common Pitfalls & Misconception Warnings**: Each concept links to known student misconceptions (e.g., confusing *Average Case* with *Worst Case* in Quicksort, or applying Dijkstra to graphs with *negative edge weights*).
+4. **PostgreSQL Persistence**: Backed by a full relational schema ([`server/db/migrations/002_knowledge_graph.sql`](server/db/migrations/002_knowledge_graph.sql)) with tables `kb_concepts`, `kb_prerequisites`, `kb_formulas`, and `kb_pitfalls`.
+
+---
+
+## 🧠 Agentic AI & Specialized Agent Routing
+
+Instead of routing every prompt to an expensive monolithic LLM call, ExamAssist AI implements a typed multi-agent routing topology ([`server/pipeline/agentRouter.js`](server/pipeline/agentRouter.js)):
+
+- **QuestionRouter**: Classifies incoming queries and determines the optimal tool & agent delegation pipeline.
+- **MathAgent**: Specialized symbolic and arithmetic solver with deterministic `mathjs` and SymPy integration.
+- **ProgrammingAgent**: Multi-language code synthesis, AST tree-sitter analysis, and Docker sandbox integration.
+- **SQLAgent**: In-memory SQLite runner, read-only query sandboxing, and execution verification.
+- **KnowledgeAgent**: Multi-hop GraphRAG traversal and official API documentation retrieval.
+- **ResearchAgent**: Multi-angle web search query synthesis with domain authority filters.
+- **VerificationAgent**: Claim extraction, cross-source contradiction check, and confidence calibration.
+- **ResponseComposer**: Unifies multi-agent outputs into a structured, validated, and student-friendly explanation.
+
+---
+
+## 🔬 Evidence-First Reranker with RRF & Contradiction Detection
+
+Retrieved sources are evaluated by a dedicated Evidence-First Reranker ([`server/pipeline/reranker.js`](server/pipeline/reranker.js)):
+
+1. **Domain Authority Scoring**: Weights academic and institutional sources (`.edu`, `.gov`, RFC specifications, official vendor documentation) substantially higher than forums or social sites.
+2. **BM25 Lexical Term Saturation**: Computes term-frequency saturation across queries and retrieved passages with stopword pruning.
+3. **Reciprocal Rank Fusion (RRF)**:
+   $$\text{RRF}(d) = \sum_{r} \frac{1}{k + \text{rank}_r(d)} \quad (k=60)$$
+   Merges lexical BM25 and domain authority rankings without requiring manual weight fine-tuning.
+4. **Claim-Level Sentence Extraction**: Isolates key evidentiary sentences matching question tokens.
+5. **Contradiction Detection**: Flags direct opposing claims across sources (e.g. "increases" vs "decreases", "linear" vs "logarithmic") and recalibrates overall confidence to `CONFLICTING`.
+
+---
+
+## 🌟 Recruiter Demo & Verification Showcase (Side Panel Tab 7)
+
+The extension Side Panel includes an interactive **Graph & Showcase** tab (Tab 7) allowing users, educators, and recruiters to inspect live verified capabilities:
+- **Graph Prerequisite Explorer**: Enter any computer science or math concept to inspect the live prerequisite DAG, formula variables, and common pitfall warnings.
+- **One-Click Benchmark Demonstrators**:
+  - `bm-graph`: Live GraphRAG Prerequisite DAG traversal on Dijkstra's Algorithm.
+  - `bm-math`: Deterministic `mathjs` calculation of compound interest formulas.
+  - `bm-docker`: Secure Docker sandbox execution with CPU/RAM caps.
+  - `bm-vision`: In-memory OCR + Vision diagram extraction without server disk persistence.
+  - `bm-contradiction`: Live multi-source contradiction detection and confidence calibration.
 
 ---
 
@@ -368,6 +423,14 @@ npm run eval:code
 | `DELETE` | `/api/kb/documents/:id` | Cascade-deletes document, chunks, and embeddings for `X-Local-User-Id`. |
 | `POST` | `/api/kb/search` | Searches official language docs + course notes with `doc` and `section` citations. |
 | `GET` | `/api/traces` | Localhost-only (`127.0.0.1`) OpenTelemetry trace viewer with automatic PII redaction. |
+
+### GraphRAG & Verification Demonstration API
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `POST` | `/api/graph/traverse` | Multi-hop BFS traversal of prerequisite DAG, linked formulas, and student pitfalls for concept. |
+| `GET` | `/api/graph/compare` | Compares two academic concepts across shared prerequisites, complexity, and trade-offs. |
+| `GET` | `/api/demo/benchmarks` | Reproducible benchmark suite showcasing GraphRAG, Math, Docker Sandbox, Vision, and Contradictions. |
+
 
 ### Model Context Protocol (MCP) Server
 ExamAssist AI includes a standalone MCP server in [`server/mcp/server.js`](server/mcp/server.js) that exposes tool capabilities directly to AI agents:

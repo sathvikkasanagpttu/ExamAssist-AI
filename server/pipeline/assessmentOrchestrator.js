@@ -17,6 +17,8 @@ import { defaultAIClient } from "../aiClient.js";
 import { logger } from "../logger.js";
 import { ragEnabled, searchKnowledgeBase } from "../kb/knowledgeBase.js";
 import { runToolCallingAgent } from "./toolCallingAgent.js";
+import { rerankSources } from "./reranker.js";
+import { defaultKnowledgeGraph } from "../kb/graphRAG.js";
 
 const CONFIDENCE_RANKS = {
   UNVERIFIED: 0,
@@ -177,6 +179,15 @@ export async function processAssessmentQuestion({
       }
     }
     allSources = [...sources, ...courseNotes];
+    if (allSources.length > 0) {
+      const rerankResult = rerankSources({
+        question: classification.rawQuestion,
+        sources: allSources,
+        options: classification.options,
+        maxResults: maxSources
+      });
+      allSources = rerankResult.rankedSources;
+    }
     await progress("solving");
     reasonedOutput = await generateReasonedAnswer({
       question: classification.rawQuestion,
@@ -269,6 +280,7 @@ export async function processAssessmentQuestion({
       relevanceTier: s.relevanceTier,
       snippet: s.snippet
     })),
+    graphContext: defaultKnowledgeGraph.traverseGraphForQuestion(classification.rawQuestion),
     retrievalTimestamp: new Date().toISOString()
   };
 }

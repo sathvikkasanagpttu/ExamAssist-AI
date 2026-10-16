@@ -49,7 +49,7 @@
     button.primary { background: #0284c7; border-color: #38bdf8; color: #fff; }
     .tabs {
       display: grid;
-      grid-template-columns: repeat(6, 1fr);
+      grid-template-columns: repeat(7, 1fr);
       gap: 4px;
       margin-bottom: 10px;
     }
@@ -161,6 +161,7 @@
     <button class="tab-btn" data-tab="tests">Tests</button>
     <button class="tab-btn" data-tab="complexity">Complexity</button>
     <button class="tab-btn" data-tab="debug">Debug</button>
+    <button class="tab-btn" data-tab="graph">Graph</button>
   </div>
 
   <!-- 1. Problem Tab -->
@@ -253,7 +254,23 @@
     <div class="label">Side-by-Side Diff (User Code vs Suggested Fix)</div>
     <div id="sp-side-by-side-diff" class="diff-grid"></div>
     <div class="label">Root Cause &amp; Unified Diff</div>
-    <pre id="sp-debug-output">Submit your code and failing output to see the exact bug line and side-by-side diff.</pre>
+  <!-- 7. Graph & Showcase Tab -->
+  <div id="tab-graph" class="tab-pane">
+    <div class="label">🕸️ GraphRAG Concept Prerequisite Traversal</div>
+    <div id="sp-graph-status" style="font-size:11px;color:var(--muted);margin-bottom:6px;">Traverses academic concept DAG, related theorems, and common pitfalls.</div>
+    <button id="sp-run-graph" class="primary" style="margin-bottom:8px;">Traverse Concepts for Current Question</button>
+    <div id="sp-graph-output" class="box" style="white-space:pre-wrap;margin-bottom:12px;font-size:11px;background:#050814;border:1px solid var(--border);border-radius:6px;padding:8px;">Click "Traverse Concepts" to view prerequisite tree.</div>
+
+    <div class="label" style="margin-top:10px;">🌟 Recruiter Benchmark Showcase (1-Click Demonstrations)</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Instantly run verified benchmarks across all core platform capabilities:</div>
+    <div style="display:flex;flex-direction:column;gap:6px;" id="sp-benchmarks-list">
+      <button class="benchmark-btn" data-bm="bm_multimodal_vision" style="text-align:left;">1. 🌲 Multimodal Diagram &amp; OCR</button>
+      <button class="benchmark-btn" data-bm="bm_code_sandbox" style="text-align:left;">2. ⚡ Secure Sandbox Code Execution</button>
+      <button class="benchmark-btn" data-bm="bm_math_deterministic" style="text-align:left;">3. 🧮 Deterministic Mathematics &amp; Bayes</button>
+      <button class="benchmark-btn" data-bm="bm_contradiction_detection" style="text-align:left;">4. ⚖️ Contradiction &amp; Conflict Detection</button>
+      <button class="benchmark-btn" data-bm="bm_graph_rag" style="text-align:left;">5. 🕸️ GraphRAG Concept DAG Traversal</button>
+    </div>
+    <pre id="sp-benchmark-result" style="margin-top:8px;font-size:11px;display:none;"></pre>
   </div>
 
   <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);">

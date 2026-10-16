@@ -6277,6 +6277,14 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       unsupported: array(string())
     }),
     sources: array(SourceItemSchema),
+    graphContext: object({
+      matchedConcepts: array(any()).optional().default([]),
+      prerequisites: array(any()).optional().default([]),
+      relatedConcepts: array(any()).optional().default([]),
+      formulas: array(any()).optional().default([]),
+      pitfalls: array(any()).optional().default([]),
+      explanationContext: string().optional().default("")
+    }).optional(),
     retrievalTimestamp: string()
   });
   const ExtractedQuestionPayloadSchema = object({
@@ -6395,6 +6403,35 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     }
     return data;
   }
+  async function requestGraphTraverse(question, apiBase, signal) {
+    const res = await fetch(`${apiBase.replace(/\/+$/, "")}/api/graph/traverse`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal,
+      body: JSON.stringify({ question })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      const err = new Error(String(data.error || `HTTP ${res.status}`));
+      err.code = typeof data.code === "string" ? data.code : void 0;
+      throw err;
+    }
+    return data;
+  }
+  async function requestRecruiterBenchmarks(apiBase, signal) {
+    const res = await fetch(`${apiBase.replace(/\/+$/, "")}/api/demo/benchmarks`, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+      signal
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      const err = new Error(String(data.error || `HTTP ${res.status}`));
+      err.code = typeof data.code === "string" ? data.code : void 0;
+      throw err;
+    }
+    return data;
+  }
   function formatCodeWithLineNumbers(code) {
     const lines = String(code || "").split(/\r?\n/);
     return lines.map((line, idx) => `${String(idx + 1).padStart(3, " ")} | ${line}`).join("\n");
@@ -6426,7 +6463,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
   </table>`;
   }
   (function initSidePanel() {
-    var _a2, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m;
+    var _a2, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n;
     const DB_NAME = "ExamAssistLocalHistoryDB";
     const STORE_NAME = "problem_history";
     let currentAnalysis = null;
@@ -6727,7 +6764,7 @@ How to Fix: ${data.howToFix}`;
       }
     });
     (_k = document.getElementById("sp-run-analyze")) == null ? void 0 : _k.addEventListener("click", async () => {
-      var _a3, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2, _n, _o, _p, _q, _r, _s, _t;
+      var _a3, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2, _n2, _o, _p, _q, _r, _s, _t;
       const question = ((_a3 = document.getElementById("sp-question")) == null ? void 0 : _a3.value.trim()) || "";
       const userCode = ((_b2 = document.getElementById("sp-code")) == null ? void 0 : _b2.value) || "";
       const language = ((_c2 = document.getElementById("sp-language")) == null ? void 0 : _c2.value) || "python";
@@ -6814,7 +6851,7 @@ Ranking & Trade-offs: ${((_k2 = data.ranking) == null ? void 0 : _k2.winnerReaso
         if (testsOut) {
           testsOut.textContent = JSON.stringify(
             {
-              sandboxExecuted: (_n = data.verification) == null ? void 0 : _n.sandboxExecuted,
+              sandboxExecuted: (_n2 = data.verification) == null ? void 0 : _n2.sandboxExecuted,
               passedTests: (_o = data.verification) == null ? void 0 : _o.passedTests,
               totalTests: (_p = data.verification) == null ? void 0 : _p.totalTests,
               testStrength: (_q = data.verification) == null ? void 0 : _q.testStrength,
@@ -6892,7 +6929,73 @@ ${data.minimalDiff}`;
         out.textContent = `Debug error: ${e.message}`;
       }
     });
-    (_m = document.getElementById("sp-clear-history")) == null ? void 0 : _m.addEventListener("click", () => {
+    (_m = document.getElementById("sp-run-graph")) == null ? void 0 : _m.addEventListener("click", async () => {
+      var _a3;
+      const question = ((_a3 = document.getElementById("sp-question")) == null ? void 0 : _a3.value.trim()) || "Explain Dijkstra algorithm and shortest path";
+      const out = document.getElementById("sp-graph-output");
+      if (!out) return;
+      out.textContent = "Traversing Academic Knowledge Graph...";
+      try {
+        const apiBase = await getApiBaseUrl();
+        const res = await requestGraphTraverse(question, apiBase);
+        const parts = [];
+        if (res.matchedConcepts && res.matchedConcepts.length > 0) {
+          parts.push(`🎯 Target Concepts:
+${res.matchedConcepts.map((c) => `  • ${c.name}: ${c.definition}`).join("\n")}`);
+        }
+        if (res.prerequisites && res.prerequisites.length > 0) {
+          parts.push(`
+📚 Prerequisite DAG (Foundational Knowledge):
+${res.prerequisites.map((p) => `  [L${p.depth}] ${p.name} — ${p.definition}`).join("\n")}`);
+        }
+        if (res.formulas && res.formulas.length > 0) {
+          parts.push(`
+📐 Linked Formulas:
+${res.formulas.map((f) => `  • ${f.name}: ${f.expression}
+    Variables: ${f.variables.join(", ")}`).join("\n")}`);
+        }
+        if (res.pitfalls && res.pitfalls.length > 0) {
+          parts.push(`
+⚠️ Common Conceptual Pitfalls:
+${res.pitfalls.map((pit) => `  • Traps: "${pit.misconception}"
+    Correction: ${pit.correction}`).join("\n")}`);
+        }
+        out.textContent = parts.length > 0 ? parts.join("\n") : "No specific knowledge graph concepts matched for this query.";
+      } catch (err) {
+        const e = err;
+        out.textContent = `Graph traversal error: ${e.message}`;
+      }
+    });
+    document.querySelectorAll(".benchmark-btn").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        var _a3;
+        const target = e.currentTarget;
+        const bmId = target == null ? void 0 : target.getAttribute("data-bm");
+        const out = document.getElementById("sp-benchmark-result");
+        if (!out || !bmId) return;
+        out.style.display = "block";
+        out.textContent = `Loading benchmark [${bmId}]...`;
+        try {
+          const apiBase = await getApiBaseUrl();
+          const data = await requestRecruiterBenchmarks(apiBase);
+          const found = (_a3 = data.benchmarks) == null ? void 0 : _a3.find((b) => b.id === bmId);
+          if (found) {
+            out.textContent = `🌟 Benchmark: ${found.title}
+Category: ${found.category}
+Description: ${found.description}
+
+Verified Payload:
+${JSON.stringify(found.samplePayload, null, 2)}`;
+          } else {
+            out.textContent = `Benchmark ${bmId} loaded successfully.`;
+          }
+        } catch (err) {
+          const errObj = err;
+          out.textContent = `Benchmark fetch error: ${errObj.message}`;
+        }
+      });
+    });
+    (_n = document.getElementById("sp-clear-history")) == null ? void 0 : _n.addEventListener("click", () => {
       void clearHistory();
     });
     void updateHistoryCount();

@@ -386,3 +386,42 @@ export async function captureAndCropVisibleRegion(rect: {
   };
 }
 
+export async function requestGraphTraverse(
+  question: string,
+  apiBase: string,
+  signal?: AbortSignal
+): Promise<Record<string, unknown>> {
+  const res = await fetch(`${apiBase.replace(/\/+$/, "")}/api/graph/traverse`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal,
+    body: JSON.stringify({ question })
+  });
+  const data = (await res.json()) as Record<string, unknown>;
+  if (!res.ok) {
+    const err = new Error(String(data.error || `HTTP ${res.status}`)) as Error & { code?: string };
+    err.code = typeof data.code === "string" ? data.code : undefined;
+    throw err;
+  }
+  return data;
+}
+
+export async function requestRecruiterBenchmarks(
+  apiBase: string,
+  signal?: AbortSignal
+): Promise<Record<string, unknown>> {
+  const res = await fetch(`${apiBase.replace(/\/+$/, "")}/api/demo/benchmarks`, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    signal
+  });
+  const data = (await res.json()) as Record<string, unknown>;
+  if (!res.ok) {
+    const err = new Error(String(data.error || `HTTP ${res.status}`)) as Error & { code?: string };
+    err.code = typeof data.code === "string" ? data.code : undefined;
+    throw err;
+  }
+  return data;
+}
+
+
