@@ -2,7 +2,7 @@ import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import app from "../server.js";
-import { AssessmentResponseSchema } from "../schemas.js";
+import { AssessmentResponseSchema, APP_VERSION } from "../schemas.js";
 import { setupStandardMocks, teardownStandardMocks } from "./test-helpers.js";
 
 beforeEach(() => {
@@ -67,17 +67,17 @@ test("API: GET /api/health returns 200 and system status", async () => {
   const res = await dispatchRequest(app, { method: "GET", url: "/api/health" });
   assert.equal(res.status, 200);
   assert.equal(res.body.status, "ok");
-  assert.equal(res.body.version, "2.2.0");
+  assert.equal(res.body.version, APP_VERSION);
   assert.ok(res.body.service.includes("ExamAssist"));
 });
 
-test("API: GET /api/config and /api/health report synchronized version 2.2.0", async () => {
+test("API: GET /api/config and /api/health report synchronized version", async () => {
   const healthRes = await dispatchRequest(app, { method: "GET", url: "/api/health" });
   const configRes = await dispatchRequest(app, { method: "GET", url: "/api/config" });
   assert.equal(healthRes.status, 200);
   assert.equal(configRes.status, 200);
-  assert.equal(healthRes.body.version, "2.2.0");
-  assert.equal(configRes.body.version, "2.2.0");
+  assert.equal(healthRes.body.version, APP_VERSION);
+  assert.equal(configRes.body.version, APP_VERSION);
   assert.equal(healthRes.body.version, configRes.body.version);
 });
 
@@ -99,7 +99,7 @@ test("API: streaming analysis emits ordered progress and a terminal done event",
 test("API: GET /api/config returns supported question types and modes", async () => {
   const res = await dispatchRequest(app, { method: "GET", url: "/api/config" });
   assert.equal(res.status, 200);
-  assert.equal(res.body.version, "2.2.0");
+  assert.equal(res.body.version, APP_VERSION);
   assert.ok(Array.isArray(res.body.supportedQuestionTypes));
   assert.ok(res.body.supportedQuestionTypes.includes("MCQ"));
   assert.ok(res.body.supportedQuestionTypes.includes("SQL"));

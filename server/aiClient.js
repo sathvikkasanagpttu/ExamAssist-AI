@@ -9,6 +9,7 @@ import { createHash } from "crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import path from "path";
 import { MASTER_SYSTEM_PROMPT } from "./prompts.js";
+import { wrapOpenAIClient } from "./tracing.js";
 
 // --- Typed AI Errors ---
 export class AIError extends Error {
@@ -103,11 +104,12 @@ export class AIClient {
     this.activeWorkingModel = null;
 
     if (this.apiKey && this.apiKey !== "replace_me" && this.apiKey.trim().length > 0) {
-      this.openai = new OpenAI({
+      const raw = new OpenAI({
         apiKey: this.apiKey,
         baseURL: this.baseURL,
         maxRetries: 0
       });
+      this.openai = wrapOpenAIClient(raw);
     } else {
       this.openai = null;
     }

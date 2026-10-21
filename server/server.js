@@ -66,6 +66,9 @@ import {
   searchDocsAndNotes
 } from "./kb/knowledgeBase.js";
 import { defaultKnowledgeGraph, compareRagVsGraphRag } from "./kb/graphRAG.js";
+import { initLangfuseTracing, flushLangfuse, isLangfuseConfigured, traceChain } from "./tracing.js";
+
+initLangfuseTracing();
 
 const app = express();
 
@@ -175,7 +178,8 @@ app.get(["/health", "/api/health"], async (_req, res) => {
       searchOrchestration: true,
       verificationPass: true,
       specializedReasoning: ["NUMERICAL", "CODING", "DEBUGGING", "SQL", "MCQ", "MULTI_SELECT"],
-      cacheEnabled: true
+      cacheEnabled: true,
+      langfuseTracing: isLangfuseConfigured()
     }
   });
 });
@@ -607,45 +611,69 @@ app.post("/api/analyze", (req, res) => {
  * POST /api/code/analyze - Full Coding Engine Pipeline
  */
 app.post("/api/code/analyze", async (req, res) => {
-  const span = startSpan("code.analyze", { language: req.body?.language });
-  try {
-    const parseResult = CodeAnalyzeRequestSchema.safeParse(req.body);
-    if (!parseResult.success) {
-      span.end("validation_error");
-      return res.status(400).json({ error: "Validation Error", details: formatZodErrors(parseResult.error) });
-    }
-    const payload = parseResult.data;
-    const scrubbedQuestion = scrubSecretsAndPII(payload.question).text;
-    const scrubbedUserCode = scrubSecretsAndPII(payload.userCode).text;
-    const cacheKey = computeProblemCacheKey({
-      userId: localUserId(req) || "anon",
-      question: scrubbedQuestion,
-      constraints: payload.constraints,
-      language: payload.language,
-      sampleTests: payload.sampleTests
-    });
+  return await traceChain(
+    "code.analyze",
+    async (traceSpan) => {
+      const span = startSpan("code.analyze", { language: req.body?.language });
+      try {
+        const parseResult = CodeAnalyzeRequestSchema.safeParse(req.body);
+        if (!parseResult.success) {
+          span.end("validation_error");
+          traceSpan.update({ level: "WARNING", statusMessage: "Validation error" });
+          return res.status(400).json({ error: "Validation Error", details: formatZodErrors(parseResult.error) });
+        }
+        const payload = parseResult.data;
+        const scrubbedQuestion = scrubSecretsAndPII(payload.question).text;
+        const scrubbedUserCode = scrubSecretsAndPII(payload.userCode).text;
+        traceSpan.update({
+          input: { language: payload.language, question: scrubbedQuestion },
+          metadata: { language: payload.language, constraints: payload.constraints },
+          tags: ["coding", payload.language].filter(Boolean)
+        });
 
-    const cached = getVerifiedCachedResult(cacheKey);
-    if (cached) {
-      span.end("cache_hit");
-      return res.json({ ...cached, fromSemanticCache: true });
-    }
+        const cacheKey = computeProblemCacheKey({
+          userId: localUserId(req) || "anon",
+          question: scrubbedQuestion,
+          constraints: payload.constraints,
+          language: payload.language,
+          sampleTests: payload.sampleTests
+        });
 
-    const result = await analyzeCodingProblem({
-      ...payload,
-      question: scrubbedQuestion,
-      userCode: scrubbedUserCode
-    });
-    setVerifiedCachedResult(cacheKey, result);
-    span.end("ok", { confidence: result.confidence });
-    res.json(result);
-  } catch (err) {
-    span.end("error", { code: err.code });
-    if (err instanceof AIError || (err.code && err.code.startsWith("AI_"))) {
-      return res.status(err.status || 503).json({ error: err.message, code: err.code });
+        const cached = getVerifiedCachedResult(cacheKey);
+        if (cached) {
+          span.end("cache_hit");
+          traceSpan.update({ output: { cached: true } });
+          return res.json({ ...cached, fromSemanticCache: true });
+        }
+
+        const result = await analyzeCodingProblem({
+          ...payload,
+          question: scrubbedQuestion,
+          userCode: scrubbedUserCode
+        });
+        setVerifiedCachedResult(cacheKey, result);
+        span.end("ok", { confidence: result.confidence });
+        traceSpan.update({
+          output: {
+            confidence: result.confidence,
+            approachSummary: result.approachSummary
+          }
+        });
+        res.json(result);
+      } catch (err) {
+        span.end("error", { code: err.code });
+        traceSpan.update({ level: "ERROR", statusMessage: err.message });
+        if (err instanceof AIError || (err.code && err.code.startsWith("AI_"))) {
+          return res.status(err.status || 503).json({ error: err.message, code: err.code });
+        }
+        res.status(500).json({ error: "Code analysis failed", message: err.message });
+      }
+    },
+    {
+      userId: localUserId(req) || undefined,
+      tags: ["coding", req.body?.language].filter(Boolean)
     }
-    res.status(500).json({ error: "Code analysis failed", message: err.message });
-  }
+  );
 });
 
 /**
@@ -987,6 +1015,18 @@ if (!isTestRun) {
     logger.info(`ExamAssist AI Server running on port ${port}`, { port });
     console.log(`ExamAssist AI Server active on http://localhost:${port}`);
   });
+}
+
+// Graceful flush on process termination
+if (!isTestRun) {
+  const onShutdown = async () => {
+    try {
+      await flushLangfuse();
+    } catch {}
+    process.exit(0);
+  };
+  process.once("SIGTERM", onShutdown);
+  process.once("SIGINT", onShutdown);
 }
 
 export default app;

@@ -13,6 +13,7 @@
  */
 
 import { createHash, randomBytes } from "node:crypto";
+import { APP_VERSION } from "../schemas.js";
 
 // --- 1. PII & Secret Scrubber ---
 const SECRET_PATTERNS = [
@@ -137,12 +138,12 @@ export function buildOtlpSpanPayload(record) {
         resource: {
           attributes: [
             { key: "service.name", value: { stringValue: "examassist-ai-backend" } },
-            { key: "service.version", value: { stringValue: "2.2.0" } }
+            { key: "service.version", value: { stringValue: APP_VERSION } }
           ]
         },
         scopeSpans: [
           {
-            scope: { name: "examassist.pipeline.tracer", version: "2.2.0" },
+            scope: { name: "examassist.pipeline.tracer", version: APP_VERSION },
             spans: [
               {
                 traceId: record.traceId,
@@ -215,9 +216,9 @@ export async function exportSpanToOtlp(record, endpoint = process.env.OTEL_EXPOR
 export async function exportSpanToLangfuse(
   record,
   {
-    publicKey = process.env.LANGFUSE_PUBLIC_KEY,
-    secretKey = process.env.LANGFUSE_SECRET_KEY,
-    host = process.env.LANGFUSE_HOST || "https://cloud.langfuse.com"
+    publicKey = process.env.LANGFUSE_PUBLIC_KEY?.replace(/^["']|["']$/g, ""),
+    secretKey = process.env.LANGFUSE_SECRET_KEY?.replace(/^["']|["']$/g, ""),
+    host = (process.env.LANGFUSE_HOST || process.env.LANGFUSE_BASE_URL || "https://cloud.langfuse.com").replace(/^["']|["']$/g, "")
   } = {}
 ) {
   const payload = buildLangfuseSpanPayload(record);

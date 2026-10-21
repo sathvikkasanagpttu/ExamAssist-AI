@@ -4,7 +4,9 @@
 
 <br/>
 
-[![Version](https://img.shields.io/badge/Release-v2.2.0-blue?style=for-the-badge&logo=github)](https://github.com/sathvikkasanagpttu/ExamAssist-AI/releases)
+[![Version](https://img.shields.io/badge/Release-v2.3.0-blue?style=for-the-badge&logo=github)](https://github.com/sathvikkasanagpttu/ExamAssist-AI/releases)
+[![Langfuse](https://img.shields.io/badge/Langfuse-Tracing_%26_Evals-ff5722?style=for-the-badge&logo=opentelemetry&logoColor=white)](#-langfuse-ai-observability--agent-skills)
+[![Langfuse Skills](https://img.shields.io/badge/Agent_Skills-github.com%2Flangfuse%2Fskills-black?style=for-the-badge&logo=github)](.agents/skills/langfuse/SKILL.md)
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-10b981?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178c6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Chrome MV3](https://img.shields.io/badge/Chrome_Extension-Manifest_V3-38bdf8?style=for-the-badge&logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/)
@@ -94,9 +96,10 @@ ExamAssist AI is engineered around **strict epistemic honesty and responsible pe
 
 ## ⚖️ Architectural Comparison Matrix
 
-| Capability | Generic LLM Chatbots | Commercial Homework Extensions | **ExamAssist AI (v2.2.0)** |
+| Capability | Generic LLM Chatbots | Commercial Homework Extensions | **ExamAssist AI (v2.3.0)** |
 | :--- | :---: | :---: | :---: |
 | **Solving Paradigm** | Monolithic single prompt | Direct web scraping + prompt | **Solve-First, Verify-Second 11-Stage Pipeline** |
+| **LLM Observability** | Blind execution / Black box | Basic server logging | **Langfuse Agent Skills + OpenTelemetry Tracing Hierarchy** |
 | **Mathematical Reasoning** | Probabilistic text prediction | Probabilistic text prediction | **Deterministic `mathjs` + SymPy Symbolic Evaluator** |
 | **Code Verification** | Untested hallucinated code | Static linters / Regex | **Docker + Seccomp + Bubblewrap Isolated Runner** |
 | **Relational Knowledge** | Vector search only (top-$k$) | Vector search only (top-$k$) | **GraphRAG Prerequisite DAG + Multi-Hop BFS** |
@@ -562,7 +565,53 @@ All backend configuration is defined in [`server/.env`](server/.env.example):
 | `SANDBOX_URL` | String | `http://127.0.0.1:8790` | Internal URL of the Docker execution sandbox service. |
 | `SANDBOX_TIMEOUT_MS` | Number | `2000` | Wall-clock execution timeout for untrusted code. |
 | `AGENT_MAX_USD` | Float | `0.05` | Maximum spend ceiling per problem in tool-calling mode. |
+| `LANGFUSE_PUBLIC_KEY` | String | *(optional)* | Langfuse public key (`pk-lf-...`) for LLM observability. |
+| `LANGFUSE_SECRET_KEY` | String | *(optional)* | Langfuse secret key (`sk-lf-...`) for trace ingestion. |
+| `LANGFUSE_BASE_URL` | String | `https://cloud.langfuse.com` | Base URL for Langfuse Cloud (EU/US) or self-hosted instance. |
 | `OTEL_REDACT_CODE_AND_QUESTIONS` | Boolean | `true` | When true, redacts student code and queries in OpenTelemetry logs. |
+
+---
+
+## 🔍 Langfuse AI Observability & Agent Skills
+
+ExamAssist AI v2.3.0 integrates the official **Langfuse Agent Skills** (installed from [`github.com/langfuse/skills`](https://github.com/langfuse/skills) into `.agents/skills/langfuse/`) and full-stack **OpenTelemetry-native LLM Tracing**.
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                   Langfuse Distributed Trace Tree                      │
+├────────────────────────────────────────────────────────────────────────┤
+│ [Chain] assessment.analyze (userId, sessionId, tags: [MCQ, Biology])   │
+│   ├── [Retriever] search.orchestrate (queries: 3, maxSources: 5)       │
+│   ├── [Retriever] kb.course_notes (semantic chunks, RRF matching)      │
+│   ├── [Chain] reasoning.generate                                       │
+│   │     ├── [Generation] OpenAI-completion (gpt-4o, temp=0)            │
+│   │     │     └── Tokens: 842 prompt, 195 completion | Cost: $0.0034   │
+│   │     └── [Generation] OpenAI-completion (evidence-guided pass)      │
+│   ├── [Chain] verification.pass                                        │
+│   │     └── [Generation] OpenAI-completion (contradiction detection)   │
+│   └── [Tool] tool.calculator (mathjs deterministic check)              │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Capabilities
+1. **Automatic OpenAI Instrumentation (`observeOpenAI`)**:
+   - OpenAI client calls in [`server/aiClient.js`](server/aiClient.js) are wrapped via `@langfuse/openai`.
+   - Captures model parameters, system/user messages, completions, exact token usage (input/output), calculated costs (USD), and time-to-first-token.
+2. **Semantic Observation Hierarchy (`@langfuse/tracing`)**:
+   - `asType: "chain"`: Master assessment orchestrator and multi-step reasoning passes.
+   - `asType: "retriever"`: Web search (Tavily/Serper) and Course Notes pgvector knowledge base lookups.
+   - `asType: "agent"`: Native tool-calling loop execution with budget ceilings.
+   - `asType: "tool"`: Sandboxed Python/Docker execution and deterministic `mathjs` calculators.
+   - `asType: "generation"`: LLM completions automatically nested under active spans.
+3. **Contextual Metadata & Session Propagation**:
+   - Every trace propagates `user_id`, `session_id`, `tags` (e.g. `['MCQ', 'Data Structures', 'Practice Mode']`), and `metadata` (calibrated confidence, verification status, latency).
+4. **Epistemic Redaction & Privacy**:
+   - Student prompts and source code are scrubbed for PII (emails, auth tokens, API keys) and masked by default according to `OTEL_REDACT_CODE_AND_QUESTIONS=true`.
+5. **Live Verification & Health Tooling**:
+   - Verify all configured credentials and tracing live with one command:
+     ```bash
+     node --env-file=server/.env server/scripts/verify-keys.mjs
+     ```
 
 ---
 

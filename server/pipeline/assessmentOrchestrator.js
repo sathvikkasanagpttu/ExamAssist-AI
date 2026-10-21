@@ -19,6 +19,7 @@ import { ragEnabled, searchKnowledgeBase } from "../kb/knowledgeBase.js";
 import { runToolCallingAgent } from "./toolCallingAgent.js";
 import { rerankSources } from "./reranker.js";
 import { defaultKnowledgeGraph } from "../kb/graphRAG.js";
+import { traceChain, traceRetriever, traceAgent } from "../tracing.js";
 
 const CONFIDENCE_RANKS = {
   UNVERIFIED: 0,
@@ -35,252 +36,319 @@ function pickLowerConfidence(confA, confB) {
   return rankA <= rankB ? normA : normB;
 }
 
-export async function processAssessmentQuestion({
-  question,
-  text,
-  options = [],
-  type,
-  questionType: qTypeParam,
-  context = "",
-  subject: subjectOverride,
-  userId = null,
-  codeSnippet = "",
-  tableData = "",
-  mathFormula = "",
-  maxSources = 5,
-  mode = "Practice Mode",
-  evaluationConfig = null,
-  aiClient = defaultAIClient,
-  onProgress = null
-}) {
-  const progress = async (event, data = {}) => {
-    if (onProgress) await onProgress(event, data);
-  };
-  const startTime = Date.now();
+export async function processAssessmentQuestion(params = {}) {
+  const {
+    question,
+    text,
+    options = [],
+    type,
+    questionType: qTypeParam,
+    context = "",
+    subject: subjectOverride,
+    userId = null,
+    sessionId = null,
+    codeSnippet = "",
+    tableData = "",
+    mathFormula = "",
+    maxSources = 5,
+    mode = "Practice Mode",
+    evaluationConfig = null,
+    aiClient = defaultAIClient,
+    onProgress = null
+  } = params;
+
   const rawQ = (question || text || "").trim();
   if (!rawQ || rawQ.length < 5) {
     throw new Error("EMPTY_QUESTION");
   }
 
-  // 1. Classify Question
-  let combinedQuestion = rawQ;
-  if (codeSnippet && !combinedQuestion.includes(codeSnippet)) {
-    combinedQuestion += `\n\nCode Snippet:\n\`\`\`\n${codeSnippet}\n\`\`\``;
-  }
-  if (tableData && !combinedQuestion.includes(tableData)) {
-    combinedQuestion += `\n\nTable Data:\n${tableData}`;
-  }
-  if (mathFormula && !combinedQuestion.includes(mathFormula)) {
-    combinedQuestion += `\n\nFormula: ${mathFormula}`;
-  }
-  if (context && !combinedQuestion.includes(context)) {
-    combinedQuestion = `Context: ${context}\n\n${combinedQuestion}`;
-  }
-
-  const classification = classifyQuestion(combinedQuestion, options);
-  if (type || qTypeParam) classification.questionType = type || qTypeParam;
-  if (subjectOverride) classification.subject = subjectOverride;
-
-  logger.info("Question classified", {
-    questionType: classification.questionType,
-    subject: classification.subject,
-    difficulty: classification.difficulty
-  });
-  await progress("classified", { questionType: classification.questionType, subject: classification.subject, questionQuality: classification.questionQuality });
-
-  // Do not spend retrieval or model calls to force an answer from an unclear
-  // prompt. The extension presents this disposition with its edit controls.
-  if (classification.questionQuality.status !== "clear") {
-    const quality = classification.questionQuality;
-    return {
-      question: classification.rawQuestion,
-      questionType: classification.questionType,
-      subject: classification.subject,
-      topic: classification.topic,
-      difficulty: classification.difficulty,
-      questionQuality: quality,
-      directAnswer: "UNVERIFIED",
-      questionRestated: `Clarify: ${classification.rawQuestion}`,
-      ownSolution: "The visible prompt needs revision before it can be answered safely.",
-      confidence: "UNVERIFIED",
-      confidenceReason: quality.reason,
-      explanation: `${quality.reason}${quality.missing ? ` Please provide: ${quality.missing}` : ""}`,
-      reasoningSteps: [],
-      optionAnalysis: [],
-      toolEvidence: [],
-      evidenceUsed: [],
-      evidenceAgreesWithSolution: false,
-      verification: {
-        status: "UNVERIFIED",
-        supported: [],
-        conflicting: [],
-        unsupported: [quality.reason]
-      },
-      sources: [],
-      retrievalTimestamp: new Date().toISOString()
-    };
-  }
-
-  // 2-3. The f_agent experiment replaces static routing with a bounded native
-  // function-calling loop. Any error deliberately falls through to the proven
-  // solve-first pipeline below, preserving the existing product behavior.
-  let allSources = [];
-  let reasonedOutput = null;
-  let agentTrace = null;
-  if (evaluationConfig?.toolCallingAgent) {
-    try {
-      await progress("solving");
-      const agent = await runToolCallingAgent({
-        question: classification.rawQuestion,
-        classification,
-        options: classification.options,
-        userId,
-        aiClient,
-        budget: evaluationConfig.agentBudget
-      });
-      allSources = agent.sources;
-      agentTrace = agent.agentTrace;
-      reasonedOutput = {
-        ...agent,
-        questionRestated: `Determine: ${classification.rawQuestion}`,
-        ownSolution: agent.explanation,
-        evidenceUsed: [],
-        evidenceAgreesWithSolution: true
+  return await traceChain(
+    "assessment.analyze",
+    async (traceSpan) => {
+      const progress = async (event, data = {}) => {
+        if (onProgress) await onProgress(event, data);
       };
-    } catch (error) {
-      logger.warn("Tool-calling agent unavailable; using static pipeline", { code: error.code || "AGENT_FALLBACK" });
-    }
-  }
+      const startTime = Date.now();
 
-  if (!reasonedOutput) {
-    let sources = [];
-    if (classification.webSearchNeeded && !evaluationConfig?.skipSearch) {
-      await progress("searching");
-      const queries = await generateSearchQueries(classification.rawQuestion, classification.subject, aiClient);
-      sources = await orchestrateSearch(queries, maxSources, classification.rawQuestion, classification.questionType);
-      await progress("retrieved", { count: sources.length });
-    }
-
-    let courseNotes = [];
-    if (ragEnabled() && userId && evaluationConfig?.ragEnabled !== false) {
-      try {
-        const retrieval = await searchKnowledgeBase({ userId, question: classification.rawQuestion });
-        courseNotes = retrieval.matches.map((match) => ({
-          type: "course_notes",
-          title: match.file,
-          domain: "Course Notes",
-          file: match.file,
-          page: match.page,
-          snippet: match.snippet,
-          section: match.section
-        }));
-      } catch (error) {
-        logger.warn("Course Notes retrieval unavailable", { code: error.code || "KB_RETRIEVAL_FAILED" });
+      // 1. Classify Question
+      let combinedQuestion = rawQ;
+      if (codeSnippet && !combinedQuestion.includes(codeSnippet)) {
+        combinedQuestion += `\n\nCode Snippet:\n\`\`\`\n${codeSnippet}\n\`\`\``;
       }
-    }
-    allSources = [...sources, ...courseNotes];
-    if (allSources.length > 0) {
-      const rerankResult = rerankSources({
-        question: classification.rawQuestion,
-        sources: allSources,
-        options: classification.options,
-        maxResults: maxSources
+      if (tableData && !combinedQuestion.includes(tableData)) {
+        combinedQuestion += `\n\nTable Data:\n${tableData}`;
+      }
+      if (mathFormula && !combinedQuestion.includes(mathFormula)) {
+        combinedQuestion += `\n\nFormula: ${mathFormula}`;
+      }
+      if (context && !combinedQuestion.includes(context)) {
+        combinedQuestion = `Context: ${context}\n\n${combinedQuestion}`;
+      }
+
+      const classification = classifyQuestion(combinedQuestion, options);
+      if (type || qTypeParam) classification.questionType = type || qTypeParam;
+      if (subjectOverride) classification.subject = subjectOverride;
+
+      traceSpan.update({
+        input: { question: rawQ, options: classification.options, subject: classification.subject, mode },
+        metadata: {
+          questionType: classification.questionType,
+          subject: classification.subject,
+          difficulty: classification.difficulty
+        },
+        tags: [classification.questionType, classification.subject, mode].filter(Boolean)
       });
-      allSources = rerankResult.rankedSources;
-    }
-    await progress("solving");
-    reasonedOutput = await generateReasonedAnswer({
-      question: classification.rawQuestion,
-      questionType: classification.questionType,
-      subject: classification.subject,
-      topic: classification.topic,
-      options: classification.options,
-      sources: allSources,
-      codeSnippet,
-      mathFormula,
-      aiClient,
-      skipTieBreak: Boolean(evaluationConfig?.skipTieBreak),
-      specializedSolvers: evaluationConfig ? Boolean(evaluationConfig.specializedSolvers) : true
-    });
-  }
 
-  // 4. Verification Pass & Contradiction Detection
-  await progress("verifying");
-  const verification = await runVerificationPass({
-    question: classification.rawQuestion,
-    directAnswer: typeof reasonedOutput.directAnswer === "object" ? (reasonedOutput.directAnswer?.text || "") : reasonedOutput.directAnswer,
-    explanation: reasonedOutput.explanation,
-    sources: allSources,
-    aiClient
-  });
-  if (reasonedOutput.toolEvidence?.some((item) => !item.executed || !item.success)) {
-    verification.status = "UNVERIFIED";
-    verification.unsupported = [...(verification.unsupported || []), "A requested deterministic tool did not execute."];
-  }
+      logger.info("Question classified", {
+        questionType: classification.questionType,
+        subject: classification.subject,
+        difficulty: classification.difficulty
+      });
+      await progress("classified", { questionType: classification.questionType, subject: classification.subject, questionQuality: classification.questionQuality });
 
-  // 5. Confidence Engine Calibration
-  const engineResult = computeConfidence({
-    verificationStatus: verification.status,
-    sources: allSources,
-    hasContradiction: verification.hasContradiction,
-    contradictionExplanation: verification.contradictionExplanation,
-    questionType: classification.questionType
-  });
+      // Do not spend retrieval or model calls to force an answer from an unclear
+      // prompt. The extension presents this disposition with its edit controls.
+      if (classification.questionQuality.status !== "clear") {
+        const quality = classification.questionQuality;
+        const unclearRes = {
+          question: classification.rawQuestion,
+          questionType: classification.questionType,
+          subject: classification.subject,
+          topic: classification.topic,
+          difficulty: classification.difficulty,
+          questionQuality: quality,
+          directAnswer: "UNVERIFIED",
+          questionRestated: `Clarify: ${classification.rawQuestion}`,
+          ownSolution: "The visible prompt needs revision before it can be answered safely.",
+          confidence: "UNVERIFIED",
+          confidenceReason: quality.reason,
+          explanation: `${quality.reason}${quality.missing ? ` Please provide: ${quality.missing}` : ""}`,
+          reasoningSteps: [],
+          optionAnalysis: [],
+          toolEvidence: [],
+          evidenceUsed: [],
+          evidenceAgreesWithSolution: false,
+          verification: {
+            status: "UNVERIFIED",
+            supported: [],
+            conflicting: [],
+            unsupported: [quality.reason]
+          },
+          sources: [],
+          retrievalTimestamp: new Date().toISOString()
+        };
+        traceSpan.update({
+          output: {
+            directAnswer: unclearRes.directAnswer,
+            confidence: unclearRes.confidence,
+            confidenceReason: unclearRes.confidenceReason
+          }
+        });
+        return unclearRes;
+      }
 
-  // Priority 1 point 4: Compute final confidence as the LOWER of engine confidence and model confidence. Never default to HIGH.
-  const finalConfidence = pickLowerConfidence(engineResult.confidence, reasonedOutput.confidence);
-  let finalConfidenceReason = engineResult.confidenceReason;
-  if (finalConfidence === (reasonedOutput.confidence || "").toUpperCase() && reasonedOutput.confidenceReason) {
-    finalConfidenceReason = reasonedOutput.confidenceReason;
-  }
-  if (verification.status === "UNVERIFIED" || allSources.length === 0) {
-    finalConfidenceReason = "Evidence is unverified or unavailable; independent verification required.";
-  }
+      // 2-3. The f_agent experiment replaces static routing with a bounded native
+      // function-calling loop. Any error deliberately falls through to the proven
+      // solve-first pipeline below, preserving the existing product behavior.
+      let allSources = [];
+      let reasonedOutput = null;
+      let agentTrace = null;
+      if (evaluationConfig?.toolCallingAgent) {
+        try {
+          await progress("solving");
+          const agent = await traceAgent("agent.tool-calling", async (agentSpan) => {
+            agentSpan.update({ input: { question: classification.rawQuestion, budget: evaluationConfig.agentBudget } });
+            const res = await runToolCallingAgent({
+              question: classification.rawQuestion,
+              classification,
+              options: classification.options,
+              userId,
+              aiClient,
+              budget: evaluationConfig.agentBudget
+            });
+            agentSpan.update({ output: { confidence: res.confidence, explanation: res.explanation } });
+            return res;
+          });
+          allSources = agent.sources;
+          agentTrace = agent.agentTrace;
+          reasonedOutput = {
+            ...agent,
+            questionRestated: `Determine: ${classification.rawQuestion}`,
+            ownSolution: agent.explanation,
+            evidenceUsed: [],
+            evidenceAgreesWithSolution: true
+          };
+        } catch (error) {
+          logger.warn("Tool-calling agent unavailable; using static pipeline", { code: error.code || "AGENT_FALLBACK" });
+        }
+      }
 
-  const latencyMs = Date.now() - startTime;
-  logger.info("Assessment processed", {
-    questionType: classification.questionType,
-    confidence: finalConfidence,
-    sourcesCount: allSources.length,
-    latencyMs
-  });
+      if (!reasonedOutput) {
+        let sources = [];
+        if (classification.webSearchNeeded && !evaluationConfig?.skipSearch) {
+          await progress("searching");
+          const queries = await generateSearchQueries(classification.rawQuestion, classification.subject, aiClient);
+          sources = await traceRetriever("search.orchestrate", async (retrieverSpan) => {
+            retrieverSpan.update({ input: { queries, maxSources } });
+            const res = await orchestrateSearch(queries, maxSources, classification.rawQuestion, classification.questionType);
+            retrieverSpan.update({ output: { count: res.length } });
+            return res;
+          });
+          await progress("retrieved", { count: sources.length });
+        }
 
-  // 6. Return Structured Assessment Response
-  return {
-    question: classification.rawQuestion,
-    questionType: classification.questionType,
-    subject: classification.subject,
-    topic: classification.topic,
-    difficulty: classification.difficulty,
-    questionQuality: classification.questionQuality,
-    directAnswer: reasonedOutput.directAnswer,
-    questionRestated: reasonedOutput.questionRestated,
-    ownSolution: reasonedOutput.ownSolution,
-    confidence: finalConfidence,
-    confidenceReason: finalConfidenceReason,
-    explanation: reasonedOutput.explanation,
-    reasoningSteps: reasonedOutput.reasoningSteps,
-    optionAnalysis: reasonedOutput.optionAnalysis,
-    toolEvidence: reasonedOutput.toolEvidence || [],
-    ...(agentTrace ? { agentTrace } : {}),
-    evidenceUsed: reasonedOutput.evidenceUsed || [],
-    evidenceAgreesWithSolution: reasonedOutput.evidenceAgreesWithSolution !== undefined ? reasonedOutput.evidenceAgreesWithSolution : true,
-    verification: {
-      status: verification.status,
-      supported: verification.supported,
-      conflicting: verification.conflicting,
-      unsupported: verification.unsupported
+        let courseNotes = [];
+        if (ragEnabled() && userId && evaluationConfig?.ragEnabled !== false) {
+          try {
+            courseNotes = await traceRetriever("kb.course_notes", async (kbSpan) => {
+              kbSpan.update({ input: { userId, question: classification.rawQuestion } });
+              const retrieval = await searchKnowledgeBase({ userId, question: classification.rawQuestion });
+              kbSpan.update({ output: { count: retrieval.matches?.length || 0 } });
+              return (retrieval.matches || []).map((match) => ({
+                type: "course_notes",
+                title: match.file,
+                domain: "Course Notes",
+                file: match.file,
+                page: match.page,
+                snippet: match.snippet,
+                section: match.section
+              }));
+            });
+          } catch (error) {
+            logger.warn("Course Notes retrieval unavailable", { code: error.code || "KB_RETRIEVAL_FAILED" });
+          }
+        }
+        allSources = [...sources, ...courseNotes];
+        if (allSources.length > 0) {
+          const rerankResult = rerankSources({
+            question: classification.rawQuestion,
+            sources: allSources,
+            options: classification.options,
+            maxResults: maxSources
+          });
+          allSources = rerankResult.rankedSources;
+        }
+        await progress("solving");
+        reasonedOutput = await traceChain("reasoning.generate", async (reasonSpan) => {
+          reasonSpan.update({ input: { question: classification.rawQuestion, questionType: classification.questionType } });
+          const res = await generateReasonedAnswer({
+            question: classification.rawQuestion,
+            questionType: classification.questionType,
+            subject: classification.subject,
+            topic: classification.topic,
+            options: classification.options,
+            sources: allSources,
+            codeSnippet,
+            mathFormula,
+            aiClient,
+            skipTieBreak: Boolean(evaluationConfig?.skipTieBreak),
+            specializedSolvers: evaluationConfig ? Boolean(evaluationConfig.specializedSolvers) : true
+          });
+          reasonSpan.update({ output: { directAnswer: res.directAnswer, confidence: res.confidence } });
+          return res;
+        });
+      }
+
+      // 4. Verification Pass & Contradiction Detection
+      await progress("verifying");
+      const verification = await traceChain("verification.pass", async (verifSpan) => {
+        verifSpan.update({ input: { question: classification.rawQuestion, sourcesCount: allSources.length } });
+        const res = await runVerificationPass({
+          question: classification.rawQuestion,
+          directAnswer: typeof reasonedOutput.directAnswer === "object" ? (reasonedOutput.directAnswer?.text || "") : reasonedOutput.directAnswer,
+          explanation: reasonedOutput.explanation,
+          sources: allSources,
+          aiClient
+        });
+        verifSpan.update({ output: { status: res.status, hasContradiction: res.hasContradiction } });
+        return res;
+      });
+      if (reasonedOutput.toolEvidence?.some((item) => !item.executed || !item.success)) {
+        verification.status = "UNVERIFIED";
+        verification.unsupported = [...(verification.unsupported || []), "A requested deterministic tool did not execute."];
+      }
+
+      // 5. Confidence Engine Calibration
+      const engineResult = computeConfidence({
+        verificationStatus: verification.status,
+        sources: allSources,
+        hasContradiction: verification.hasContradiction,
+        contradictionExplanation: verification.contradictionExplanation,
+        questionType: classification.questionType
+      });
+
+      // Priority 1 point 4: Compute final confidence as the LOWER of engine confidence and model confidence. Never default to HIGH.
+      const finalConfidence = pickLowerConfidence(engineResult.confidence, reasonedOutput.confidence);
+      let finalConfidenceReason = engineResult.confidenceReason;
+      if (finalConfidence === (reasonedOutput.confidence || "").toUpperCase() && reasonedOutput.confidenceReason) {
+        finalConfidenceReason = reasonedOutput.confidenceReason;
+      }
+      if (verification.status === "UNVERIFIED" || allSources.length === 0) {
+        finalConfidenceReason = "Evidence is unverified or unavailable; independent verification required.";
+      }
+
+      const latencyMs = Date.now() - startTime;
+      logger.info("Assessment processed", {
+        questionType: classification.questionType,
+        confidence: finalConfidence,
+        sourcesCount: allSources.length,
+        latencyMs
+      });
+
+      // 6. Return Structured Assessment Response
+      const finalResponse = {
+        question: classification.rawQuestion,
+        questionType: classification.questionType,
+        subject: classification.subject,
+        topic: classification.topic,
+        difficulty: classification.difficulty,
+        questionQuality: classification.questionQuality,
+        directAnswer: reasonedOutput.directAnswer,
+        questionRestated: reasonedOutput.questionRestated,
+        ownSolution: reasonedOutput.ownSolution,
+        confidence: finalConfidence,
+        confidenceReason: finalConfidenceReason,
+        explanation: reasonedOutput.explanation,
+        reasoningSteps: reasonedOutput.reasoningSteps,
+        optionAnalysis: reasonedOutput.optionAnalysis,
+        toolEvidence: reasonedOutput.toolEvidence || [],
+        ...(agentTrace ? { agentTrace } : {}),
+        evidenceUsed: reasonedOutput.evidenceUsed || [],
+        evidenceAgreesWithSolution: reasonedOutput.evidenceAgreesWithSolution !== undefined ? reasonedOutput.evidenceAgreesWithSolution : true,
+        verification: {
+          status: verification.status,
+          supported: verification.supported,
+          conflicting: verification.conflicting,
+          unsupported: verification.unsupported
+        },
+        sources: allSources.map(s => ({
+          ...(s.type === "course_notes" ? { type: "course_notes", file: s.file, page: s.page } : { type: "web" }),
+          title: s.title,
+          url: s.url,
+          domain: s.domain,
+          authorityTier: s.authorityTier,
+          relevanceTier: s.relevanceTier,
+          snippet: s.snippet
+        })),
+        graphContext: defaultKnowledgeGraph.traverseGraphForQuestion(classification.rawQuestion),
+        retrievalTimestamp: new Date().toISOString()
+      };
+
+      traceSpan.update({
+        output: {
+          directAnswer: finalResponse.directAnswer,
+          confidence: finalResponse.confidence,
+          confidenceReason: finalResponse.confidenceReason,
+          verificationStatus: finalResponse.verification?.status
+        }
+      });
+
+      return finalResponse;
     },
-    sources: allSources.map(s => ({
-      ...(s.type === "course_notes" ? { type: "course_notes", file: s.file, page: s.page } : { type: "web" }),
-      title: s.title,
-      url: s.url,
-      domain: s.domain,
-      authorityTier: s.authorityTier,
-      relevanceTier: s.relevanceTier,
-      snippet: s.snippet
-    })),
-    graphContext: defaultKnowledgeGraph.traverseGraphForQuestion(classification.rawQuestion),
-    retrievalTimestamp: new Date().toISOString()
-  };
+    {
+      userId: userId || undefined,
+      sessionId: sessionId || undefined,
+      tags: [mode, subjectOverride, type || qTypeParam].filter(Boolean)
+    }
+  );
 }

@@ -4,6 +4,7 @@ import { existsSync, readFileSync, rmSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { verifyIgnoreFiles, buildAndAuditCleanZip } from "../scripts/pack.mjs";
+import { APP_VERSION } from "../schemas.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const serverRoot = path.resolve(__dirname, "..");
@@ -68,7 +69,7 @@ test("Phase 0.6: Monorepo version numbers are consistent across root, server, ex
   const manifest = JSON.parse(readFileSync(path.join(repoRoot, "extension", "manifest.json"), "utf8"));
   const sharedPkg = JSON.parse(readFileSync(path.join(repoRoot, "shared", "package.json"), "utf8"));
 
-  assert.equal(rootPkg.version, "2.2.0");
+  assert.equal(rootPkg.version, APP_VERSION);
   assert.equal(serverPkg.version, rootPkg.version);
   assert.equal(extPkg.version, rootPkg.version);
   assert.equal(manifest.version, rootPkg.version);
