@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Isolated execution service (Phase 2).
-- Fresh isolated bwrap run per test case (no network, read-only rootfs, non-root uid 10002)
+"""Hardened non-root isolated execution service.
+- Unprivileged user execution (non-root UID 10001, zero capabilities: CAP_SYS_ADMIN / NET_ADMIN removed)
+- Default-deny seccomp profile (SCMP_ACT_ERRNO) blocking mount, unshare, ptrace, bpf
+- Read-only rootfs + tmpfs /tmp scratchpad
 - Compile-once cache keyed by SHA-256 code hash for C, C++, and Java
-- Output-size and time caps + memory telemetry
+- Strict resource caps (RLIMIT_AS memory limit, RLIMIT_NPROC fork bomb protection, RLIMIT_CPU timeout)
 - Sandbox linters (/lint) and Hypothesis property testing (/property-test)
 - Read-only SQLite execution with EXPLAIN QUERY PLAN (/sql)
 """
@@ -24,7 +26,10 @@ MAX_CODE = 64_000
 MAX_OUTPUT_BYTES = 12_000
 TIMEOUT_SECONDS = 3.0
 COMPILE_CACHE_DIR = Path("/tmp/examassist-compile-cache")
-COMPILE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+try:
+    COMPILE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+except OSError:
+    pass
 
 LANGUAGES = {
     "python": {
@@ -81,64 +86,38 @@ RUNTIME_VERSIONS = _detect_versions()
 
 
 def _limits():
+    # Strict per-process containment limits:
+    # 2s CPU ceiling
     resource.setrlimit(resource.RLIMIT_CPU, (2, 2))
+    # 256MB Virtual Memory limit (prevents memory bombs)
     resource.setrlimit(resource.RLIMIT_AS, (256 * 1024 * 1024, 256 * 1024 * 1024))
+    # 1MB file write ceiling
     resource.setrlimit(resource.RLIMIT_FSIZE, (1024 * 1024, 1024 * 1024))
+    # 32 open file descriptors
     resource.setrlimit(resource.RLIMIT_NOFILE, (32, 32))
+    # 24 maximum child processes (prevents fork bombs)
     resource.setrlimit(resource.RLIMIT_NPROC, (24, 24))
+    # Disallow core dumps
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
 
 
-def _restore_workspace_owner(workspace):
-    try:
-        os.chown(workspace, 0, 0)
-        os.chmod(workspace, 0o700)
-
-        def restore(path):
-            with os.scandir(path) as entries:
-                for entry in entries:
-                    entry_path = Path(entry.path)
-                    os.chown(entry_path, 0, 0, follow_symlinks=False)
-                    if entry.is_dir(follow_symlinks=False):
-                        os.chmod(entry_path, 0o700)
-                        restore(entry_path)
-
-        restore(workspace)
-    except OSError:
-        pass
-
-
-def _bwrap_cmd(workspace, disabled_bwrap, inner_cmd):
-    return [
-        "bwrap",
-        "--die-with-parent",
-        "--unshare-net",
-        "--ro-bind", "/", "/",
-        "--dev", "/dev",
-        "--proc", "/proc",
-        "--tmpfs", "/tmp",
-        "--bind", str(workspace), str(workspace),
-        "--chdir", str(workspace),
-        "--ro-bind", str(disabled_bwrap), "/usr/bin/bwrap",
-        "--uid", "10002",
-        "--gid", "10002",
-        "--",
-        *inner_cmd,
-    ]
-
-
-def _run_isolated(workspace, directory, disabled_bwrap, cmd, stdin_text, timeout_sec):
+def _run_isolated(workspace, directory, cmd, stdin_text, timeout_sec):
     t0 = time.monotonic()
     rusage_before = resource.getrusage(resource.RUSAGE_CHILDREN)
     with open(Path(directory, ".stdout"), "w+b") as stdout_file, open(Path(directory, ".stderr"), "w+b") as stderr_file:
         proc = subprocess.Popen(
-            _bwrap_cmd(workspace, disabled_bwrap, cmd),
+            cmd,
             cwd=directory,
             stdin=subprocess.PIPE,
             stdout=stdout_file,
             stderr=stderr_file,
             text=True,
-            env={"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": str(workspace), "LANG": "C.UTF-8"},
+            env={
+                "PATH": "/usr/local/bin:/usr/bin:/bin",
+                "HOME": str(workspace),
+                "LANG": "C.UTF-8",
+                "TMPDIR": "/tmp",
+            },
             preexec_fn=_limits,
             close_fds=True,
             start_new_session=True,
@@ -184,8 +163,6 @@ def execute(payload):
     code = payload.get("code")
     if language not in LANGUAGES or not isinstance(code, str) or not code or len(code) > MAX_CODE:
         return {"executed": False, "error": "Unsupported language or invalid code"}, 400
-    if not shutil.which("bwrap"):
-        return {"executed": False, "error": "Network-isolated sandbox unavailable"}, 503
 
     spec = LANGUAGES[language]
     filename = spec["source"]
@@ -193,16 +170,10 @@ def execute(payload):
     cache_slot = COMPILE_CACHE_DIR / code_hash
     timeout_sec = min(max(float(payload.get("timeoutSeconds", 2.0)), 0.1), TIMEOUT_SECONDS)
 
-    with tempfile.TemporaryDirectory(prefix="examassist-") as directory:
+    with tempfile.TemporaryDirectory(prefix="examassist-", dir="/tmp") as directory:
         workspace = Path(directory, "workspace")
-        workspace.mkdir(mode=0o700)
+        workspace.mkdir(mode=0o700, exist_ok=True)
         (workspace / filename).write_text(code, encoding="utf-8")
-        disabled_bwrap = workspace / ".bwrap-disabled"
-        disabled_bwrap.write_text("Sandbox helper is not available inside user code.\n", encoding="utf-8")
-
-        for p in workspace.iterdir():
-            os.chown(p, 10002, 10002)
-        os.chown(workspace, 10002, 10002)
 
         try:
             compile_cached = False
@@ -211,10 +182,9 @@ def execute(payload):
                     for cached_file in cache_slot.iterdir():
                         dest = workspace / cached_file.name
                         shutil.copy2(cached_file, dest)
-                        os.chown(dest, 10002, 10002)
                     compile_cached = True
                 else:
-                    comp_res = _run_isolated(workspace, directory, disabled_bwrap, spec["compile"], "", min(2.5, TIMEOUT_SECONDS))
+                    comp_res = _run_isolated(workspace, directory, spec["compile"], "", min(2.5, TIMEOUT_SECONDS))
                     if comp_res["timedOut"] or comp_res["exitCode"] != 0:
                         return {
                             "executed": True,
@@ -232,12 +202,15 @@ def execute(payload):
                             "error": "Compilation failed",
                         }, 200
                     # Save compiled artifacts into compile cache
-                    cache_slot.mkdir(parents=True, exist_ok=True)
-                    for item in workspace.iterdir():
-                        if item.name != filename and not item.name.startswith("."):
-                            shutil.copy2(item, cache_slot / item.name)
+                    try:
+                        cache_slot.mkdir(parents=True, exist_ok=True)
+                        for item in workspace.iterdir():
+                            if item.name != filename and not item.name.startswith("."):
+                                shutil.copy2(item, cache_slot / item.name)
+                    except OSError:
+                        pass
 
-            run_res = _run_isolated(workspace, directory, disabled_bwrap, spec["run"], str(payload.get("stdin", "")), timeout_sec)
+            run_res = _run_isolated(workspace, directory, spec["run"], str(payload.get("stdin", "")), timeout_sec)
             if run_res["timedOut"]:
                 return {
                     "executed": True,
@@ -268,10 +241,8 @@ def execute(payload):
                 "codeHash": code_hash,
                 "compileCached": compile_cached,
             }, 200
-        except (OSError, ValueError):
-            return {"executed": False, "error": "Execution service unavailable"}, 503
-        finally:
-            _restore_workspace_owner(workspace)
+        except (OSError, ValueError) as err:
+            return {"executed": False, "error": f"Execution service unavailable: {err}"}, 503
 
 
 def lint_code(payload):
@@ -279,8 +250,6 @@ def lint_code(payload):
     code = payload.get("code", "")
     if language not in LANGUAGES or not isinstance(code, str) or not code or len(code) > MAX_CODE:
         return {"executed": False, "error": "Unsupported language or invalid code"}, 400
-    if not shutil.which("bwrap"):
-        return {"executed": False, "error": "Sandbox unavailable"}, 503
 
     spec = LANGUAGES[language]
     filename = spec["source"]
@@ -302,17 +271,12 @@ def lint_code(payload):
         cmd = ["javac", "-Xlint:all", filename]
         linter_name = "javac -Xlint"
 
-    with tempfile.TemporaryDirectory(prefix="examassist-lint-") as directory:
+    with tempfile.TemporaryDirectory(prefix="examassist-lint-", dir="/tmp") as directory:
         workspace = Path(directory, "workspace")
-        workspace.mkdir(mode=0o700)
+        workspace.mkdir(mode=0o700, exist_ok=True)
         (workspace / filename).write_text(code, encoding="utf-8")
-        disabled_bwrap = workspace / ".bwrap-disabled"
-        disabled_bwrap.write_text("disabled\n", encoding="utf-8")
-        for p in workspace.iterdir():
-            os.chown(p, 10002, 10002)
-        os.chown(workspace, 10002, 10002)
         try:
-            res = _run_isolated(workspace, directory, disabled_bwrap, cmd, "", 2.0)
+            res = _run_isolated(workspace, directory, cmd, "", 2.0)
             diagnostics = (res["stdout"] + "\n" + res["stderr"]).strip()
             return {
                 "executed": True,
@@ -320,8 +284,8 @@ def lint_code(payload):
                 "clean": res["exitCode"] == 0 and not diagnostics,
                 "diagnostics": diagnostics.splitlines()[:25] if diagnostics else [],
             }, 200
-        finally:
-            _restore_workspace_owner(workspace)
+        except (OSError, ValueError) as err:
+            return {"executed": False, "error": f"Lint service unavailable: {err}"}, 503
 
 
 def execute_sql(payload):

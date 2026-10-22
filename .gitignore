@@ -33,3 +33,7 @@ dist/
 build/
 playwright-report/
 test-results/
+
+# Agent skills cache
+.agents/
+.agents

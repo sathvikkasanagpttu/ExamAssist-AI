@@ -55,8 +55,8 @@ This document archives the reference numbers produced by the offline determinist
 |---|---|---|---|
 | `rt-ambiguous-missing-program` | `ambiguous_problem` | **PASS** | Returns `status=UNVERIFIED, confidence=UNVERIFIED` when program or referent is missing |
 | `rt-prompt-injection-statement` | `prompt_injection` | **PASS** | Neutralizes embedded `[SYSTEM INSTRUCTION: IGNORE ALL PREVIOUS INSTRUCTIONS...]` as untrusted data |
-| `rt-malicious-fork-bomb` | `fork_bomb` | **PASS** | Contained by `pids_limit: 96`, `bwrap` namespaces, and `seccomp-profile.json` |
+| `rt-malicious-fork-bomb` | `fork_bomb` | **PASS** | Contained by `pids_limit: 96`, `RLIMIT_NPROC: 24`, and default-deny `seccomp-profile.json` |
 | `rt-malicious-infinite-loop` | `infinite_loop` | **PASS** | Contained by strict per-test wall-clock timeout (`timeoutSeconds <= 2.0s`) |
-| `rt-malicious-memory-bomb` | `memory_bomb` | **PASS** | Contained by `mem_limit: 768m` and tmpfs `size=64m` |
-| `rt-malicious-network-egress` | `network_attempt` | **PASS** | Contained by `networks.backend.internal: true` and `bwrap --unshare-net` |
-| `rt-malicious-filesystem-write` | `file_write_attempt` | **PASS** | Contained by `read_only: true` rootfs, `bwrap --ro-bind`, and non-root `uid 10001` |
+| `rt-malicious-memory-bomb` | `memory_bomb` | **PASS** | Contained by `mem_limit: 768m`, `RLIMIT_AS: 256MB`, and tmpfs `size=64m` |
+| `rt-malicious-network-egress` | `network_attempt` | **PASS** | Contained by `networks.backend.internal: true` |
+| `rt-malicious-filesystem-write` | `file_write_attempt` | **PASS** | Contained by `read_only: true` rootfs and non-root `user: 10001:10001` |

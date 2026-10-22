@@ -95,14 +95,13 @@ services:
     expose:
       - "8790"
     read_only: true
-    user: "0:0"
+    user: "10001:10001"
     cap_drop: [ALL]
-    cap_add: [SETPCAP, SYS_ADMIN, NET_ADMIN, CHOWN]
     security_opt:
       - no-new-privileges:true
       - seccomp=./server/sandbox/seccomp-profile.json
     tmpfs:
-      - /tmp:rw,noexec,nosuid,size=64m
+      - /tmp:rw,nosuid,size=64m
     mem_limit: 768m
     cpus: 1.0
     pids_limit: 96

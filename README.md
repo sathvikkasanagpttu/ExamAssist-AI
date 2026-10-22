@@ -6,7 +6,7 @@
 
 [![Version](https://img.shields.io/badge/Release-v2.3.1-blue?style=for-the-badge&logo=github)](https://github.com/sathvikkasanagpttu/ExamAssist-AI/releases)
 [![Langfuse](https://img.shields.io/badge/Langfuse-Tracing_%26_Evals-ff5722?style=for-the-badge&logo=opentelemetry&logoColor=white)](#-langfuse-ai-observability--agent-skills)
-[![Langfuse Skills](https://img.shields.io/badge/Agent_Skills-github.com%2Flangfuse%2Fskills-black?style=for-the-badge&logo=github)](.agents/skills/langfuse/SKILL.md)
+[![Langfuse Skills](https://img.shields.io/badge/Agent_Skills-github.com%2Flangfuse%2Fskills-black?style=for-the-badge&logo=github)](https://github.com/langfuse/skills)
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-10b981?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178c6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Chrome MV3](https://img.shields.io/badge/Chrome_Extension-Manifest_V3-38bdf8?style=for-the-badge&logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/)
@@ -41,7 +41,7 @@
 
 ## 🌟 Overview & Core Philosophy
 
-**ExamAssist AI** is an enterprise-grade academic assessment copilot and study platform engineered for students, educators, and software engineers. Built on a modular **Node.js / Express ESM** backend, an isolated **Docker + Bubblewrap + Seccomp** multi-language sandbox, and a **Chrome Manifest V3 Extension** (TypeScript + Preact + Tailwind CSS rendered inside an encapsulated **Shadow DOM**), it transforms raw AI generation into a calibrated, reproducible, and verifiable learning partner.
+**ExamAssist AI** is an enterprise-grade academic assessment copilot and study platform engineered for students, educators, and software engineers. Built on a modular **Node.js / Express ESM** backend, an isolated **Docker + Non-Root + Default-Deny Seccomp** multi-language sandbox, and a **Chrome Manifest V3 Extension** (TypeScript + Preact + Tailwind CSS rendered inside an encapsulated **Shadow DOM**), it transforms raw AI generation into a calibrated, reproducible, and verifiable learning partner.
 
 ### The Problem with Conventional LLM Study Tools
 Most AI homework solvers suffer from catastrophic shortcomings:
@@ -101,7 +101,7 @@ ExamAssist AI is engineered around **strict epistemic honesty and responsible pe
 | **Solving Paradigm** | Monolithic single prompt | Direct web scraping + prompt | **Solve-First, Verify-Second 11-Stage Pipeline** |
 | **LLM Observability** | Blind execution / Black box | Basic server logging | **Langfuse Agent Skills + OpenTelemetry Tracing Hierarchy** |
 | **Mathematical Reasoning** | Probabilistic text prediction | Probabilistic text prediction | **Deterministic `mathjs` + SymPy Symbolic Evaluator** |
-| **Code Verification** | Untested hallucinated code | Static linters / Regex | **Docker + Seccomp + Bubblewrap Isolated Runner** |
+| **Code Verification** | Untested hallucinated code | Static linters / Regex | **Docker + Default-Deny Seccomp + Zero-Cap Isolated Runner** |
 | **Relational Knowledge** | Vector search only (top-$k$) | Vector search only (top-$k$) | **GraphRAG Prerequisite DAG + Multi-Hop BFS** |
 | **Evidence Reranking** | Cosine similarity cutoff | None | **BM25 Saturation + Domain Authority + RRF ($k=60$)** |
 | **Contradiction Detection** | None (sycophantic agreement) | None | **Automated Claim Extraction & Semantic Opposing-Claim Flagging** |
@@ -142,7 +142,7 @@ flowchart TD
     end
 
     subgraph Execution ["Deterministic Execution & Storage Sandboxes"]
-        DockerBox["Docker + Bubblewrap Sandbox (Python/C/C++/Java/JS)"]
+        DockerBox["Hardened Docker Sandbox (Non-Root/Seccomp/Zero-Cap)"]
         MathBox["MathJS + SymPy Deterministic Evaluator"]
         SqlBox["In-Memory SQLite Engine (Read-Only)"]
         PgVector["PostgreSQL 16 + pgvector (Course Notes RAG)"]
@@ -697,7 +697,7 @@ npm run test:e2e         # Playwright headless browser E2E test loading dist wit
 
 ### 🛡️ Release Hardening & Verification Suite (v2.3.1)
 The v2.3.1 release includes comprehensive enterprise security, distribution, and runtime hardening:
-- **Sandbox Seccomp Enforcement**: Containerized sandbox explicitly mounts [`server/sandbox/seccomp-profile.json`](server/sandbox/seccomp-profile.json) via Docker Compose (`security_opt: ["no-new-privileges:true", "seccomp=..."]`), actively restricting dangerous system calls (`ptrace`, `bpf`, `kexec_load`).
+- **Sandbox Hardening (Non-Root & Default-Deny Seccomp)**: Containerized sandbox runs strictly non-root (`user: "10001:10001"`), drops all Linux capabilities (`cap_drop: [ALL]` with `CAP_SYS_ADMIN` and `CAP_NET_ADMIN` removed), and enforces a default-deny seccomp profile ([`server/sandbox/seccomp-profile.json`](server/sandbox/seccomp-profile.json) with `SCMP_ACT_ERRNO` base). Proven with tests verifying containment of 8 attack vectors: `mount`, `unshare`, `ptrace`, `bpf`, `network egress`, `writing outside /tmp`, `fork bombs`, and `memory bombs`.
 - **Network & Gateway Hardening**: Default localhost loopback binding (`HOST=127.0.0.1`), strict CORS origin allow-listing (`ALLOWED_ORIGINS` & `chrome-extension://${EXTENSION_ID}`), rejection of non-configured `null` origins, and proxy-aware (`trust proxy`) rate limiting backed by LRU memory or Redis.
 - **Chrome MV3 Distribution Integrity**: Automated manifest auditor (`npm run verify:dist`) guarantees all icons, content scripts, background workers, and HTML panels are packaged into `extension/dist/`.
 - **Non-Destructive Storage Migration**: `chrome.storage.local` updates run versioned migrations that preserve user-configured API bases and custom allowed domains without overwriting user data.

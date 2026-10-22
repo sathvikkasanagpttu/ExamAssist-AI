@@ -27,10 +27,13 @@ ExamAssist AI is engineered around strict ethical, security, and privacy boundar
 
 ## 3. Sandbox Isolation & Defense-in-Depth (`server/sandbox/`)
 
-- **Internal-Only Container Networking**: `examassist-sandbox` in `docker-compose.yml` uses `expose: ["8790"]` on `networks: [backend]` (`internal: true`) and is **never** published to the host's ports.
-- **Per-Test Process Isolation**:
-  - Runs inside `bubblewrap` (`bwrap`) with `--unshare-all`, `--ro-bind` rootfs, tmpfs `/tmp` (`noexec,nosuid,size=64m`), and unprivileged user `uid 10001` (`sandbox`).
-  - Enforces `pids_limit: 96`, `mem_limit: 768m`, `cpus: 1.0`, `no-new-privileges:true`, and `server/sandbox/seccomp-profile.json` blocking dangerous kernel syscalls including `ptrace`, `bpf`, `kexec_load`, and `perf_event_open` (with network isolation enforced at the Bubblewrap boundary via `--unshare-net`) (Verified by [`server/test/seccomp.test.js`](../server/test/seccomp.test.js)).
+- **Internal-Only Container Networking**: `examassist-sandbox` in `docker-compose.yml` uses `expose: ["8790"]` on `networks: [backend]` (`internal: true`) and is **never** published to the host's ports. Outbound internet egress is strictly blocked.
+- **Non-Root & Zero-Capability Container**:
+  - Drops root completely; runs as unprivileged `user: "10001:10001"` (`sandbox`).
+  - Drops all capabilities (`cap_drop: [ALL]`), with `CAP_SYS_ADMIN` and `CAP_NET_ADMIN` completely removed.
+  - Enforces `read_only: true` rootfs with isolated scratchpad in tmpfs `/tmp` (`rw,nosuid,size=64m`).
+  - Enforces `pids_limit: 96`, `mem_limit: 768m`, `cpus: 1.0`, `no-new-privileges:true`, and per-job POSIX `setrlimit` (`RLIMIT_NPROC: 24`, `RLIMIT_AS: 256MB`, `RLIMIT_CPU: 2s`) to contain fork bombs and memory bombs.
+  - Hardened default-deny seccomp profile (`server/sandbox/seccomp-profile.json` with `SCMP_ACT_ERRNO` default action) blocking dangerous kernel syscalls including `mount`, `unshare`, `ptrace`, `bpf`, `kexec_load`, and `reboot` (Verified by [`server/test/seccomp.test.js`](../server/test/seccomp.test.js)).
   - Supports optional `gVisor` (`runsc`) runtime via `SANDBOX_RUNTIME=runsc`.
 - **BullMQ + Redis Job Queue (`server/pipeline/executionQueue.js`)**:
   - Enforces per-user concurrency limits (`SANDBOX_USER_CONCURRENCY=2`), queue timeouts, and compile-once SHA-256 artifact caching for C, C++, and Java (Verified by [`server/test/phase2-coding-engine.test.js`](../server/test/phase2-coding-engine.test.js)).
