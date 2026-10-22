@@ -3,7 +3,7 @@
  * Uses mathjs to compute and verify numerical questions with absolute precision.
  */
 
-import { evaluate, round } from "mathjs";
+import { evaluate, round } from "mathjs/number";
 
 /**
  * Safely evaluates a mathematical expression using mathjs

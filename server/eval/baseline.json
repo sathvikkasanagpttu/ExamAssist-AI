@@ -181,7 +181,8 @@
         }
       },
       "runId": "2026-10-12T19-32-40_a_single_pass_live_examassist-eval-v1",
-      "date": "2026-10-12T19:32:40.067Z"
+      "date": "2026-10-12T19:32:40.067Z",
+      "artifact": "2026-10-12T19-32-40_a_single_pass.json"
     },
     "b_solve_evidence:live:examassist-eval-v1": {
       "smokeMode": false,
@@ -356,7 +357,8 @@
         }
       },
       "runId": "2026-10-12T19-32-40_b_solve_evidence_live_examassist-eval-v1",
-      "date": "2026-10-12T19:32:40.762Z"
+      "date": "2026-10-12T19:32:40.762Z",
+      "artifact": "2026-10-12T19-32-40_b_solve_evidence.json"
     },
     "c_solve_tiebreak:live:examassist-eval-v1": {
       "smokeMode": false,
@@ -531,7 +533,8 @@
         }
       },
       "runId": "2026-10-12T19-32-41_c_solve_tiebreak_live_examassist-eval-v1",
-      "date": "2026-10-12T19:32:41.432Z"
+      "date": "2026-10-12T19:32:41.432Z",
+      "artifact": "2026-10-12T19-32-41_c_solve_tiebreak.json"
     },
     "d_rag:live:examassist-eval-v1": {
       "smokeMode": false,
@@ -706,7 +709,8 @@
         }
       },
       "runId": "2026-10-12T19-32-42_d_rag_live_examassist-eval-v1",
-      "date": "2026-10-12T19:32:42.113Z"
+      "date": "2026-10-12T19:32:42.113Z",
+      "artifact": "2026-10-12T19-32-42_d_rag.json"
     },
     "e_specialized:live:examassist-eval-v1": {
       "smokeMode": false,
@@ -881,7 +885,8 @@
         }
       },
       "runId": "2026-10-12T19-32-42_e_specialized_live_examassist-eval-v1",
-      "date": "2026-10-12T19:32:42.782Z"
+      "date": "2026-10-12T19:32:42.782Z",
+      "artifact": "2026-10-12T19-32-42_e_specialized.json"
     },
     "f_agent:live:examassist-eval-v1": {
       "smokeMode": false,
@@ -1056,7 +1061,8 @@
         }
       },
       "runId": "2026-10-12T19-32-43_f_agent_live_examassist-eval-v1",
-      "date": "2026-10-12T19:32:43.438Z"
+      "date": "2026-10-12T19:32:43.438Z",
+      "artifact": "2026-10-12T19-32-43_f_agent.json"
     }
   }
 }

@@ -4,7 +4,7 @@
 
 <br/>
 
-[![Version](https://img.shields.io/badge/Release-v2.3.0-blue?style=for-the-badge&logo=github)](https://github.com/sathvikkasanagpttu/ExamAssist-AI/releases)
+[![Version](https://img.shields.io/badge/Release-v2.3.1-blue?style=for-the-badge&logo=github)](https://github.com/sathvikkasanagpttu/ExamAssist-AI/releases)
 [![Langfuse](https://img.shields.io/badge/Langfuse-Tracing_%26_Evals-ff5722?style=for-the-badge&logo=opentelemetry&logoColor=white)](#-langfuse-ai-observability--agent-skills)
 [![Langfuse Skills](https://img.shields.io/badge/Agent_Skills-github.com%2Flangfuse%2Fskills-black?style=for-the-badge&logo=github)](.agents/skills/langfuse/SKILL.md)
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-10b981?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
@@ -96,7 +96,7 @@ ExamAssist AI is engineered around **strict epistemic honesty and responsible pe
 
 ## ⚖️ Architectural Comparison Matrix
 
-| Capability | Generic LLM Chatbots | Commercial Homework Extensions | **ExamAssist AI (v2.3.0)** |
+| Capability | Generic LLM Chatbots | Commercial Homework Extensions | **ExamAssist AI (v2.3.1)** |
 | :--- | :---: | :---: | :---: |
 | **Solving Paradigm** | Monolithic single prompt | Direct web scraping + prompt | **Solve-First, Verify-Second 11-Stage Pipeline** |
 | **LLM Observability** | Blind execution / Black box | Basic server logging | **Langfuse Agent Skills + OpenTelemetry Tracing Hierarchy** |
@@ -574,7 +574,7 @@ All backend configuration is defined in [`server/.env`](server/.env.example):
 
 ## 🔍 Langfuse AI Observability & Agent Skills
 
-ExamAssist AI v2.3.0 integrates the official **Langfuse Agent Skills** (installed from [`github.com/langfuse/skills`](https://github.com/langfuse/skills) into `.agents/skills/langfuse/`) and full-stack **OpenTelemetry-native LLM Tracing**.
+ExamAssist AI v2.3.1 integrates the official **Langfuse Agent Skills** (installed from [`github.com/langfuse/skills`](https://github.com/langfuse/skills) into `.agents/skills/langfuse/`) and full-stack **OpenTelemetry-native LLM Tracing**.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -668,29 +668,42 @@ Exposes tools to external AI developer tools (Claude Desktop, Cursor, Antigravit
 
 ## 🧪 Testing, Quality Gates & Packaging
 
-The project enforces strict code quality across both the server and extension:
+The project enforces strict code quality and verification across both the server and extension:
 
 ```bash
 # Monorepo Quality Gate Commands (Root)
-npm run lint          # ESLint & syntax validation across server and extension
-npm run typecheck     # Strict TypeScript type verification in extension
-npm test              # Full test execution (123 server tests + 7 Vitest adapter tests)
-npm run build         # Compiles the extension via Vite into extension/dist/
-npm run pack          # Builds a verified release archive (ExamAssist-AI-clean.zip)
+npm run lint             # ESLint, syntax validation & cross-monorepo version parity check
+npm run typecheck        # Strict TypeScript type verification across packages
+npm test                 # Full test execution (152 server tests + 12 Vitest extension tests)
+npm run build            # Compiles the extension via Vite and syncs bundles to extension/dist/
+npm run verify:dist      # Audits dist/manifest.json ensuring 100% of referenced bundle assets exist
+npm run docs:verify      # Verifies all claims in EVAL_REPORT.md link to verified result artifacts
+npm run pack             # Builds a verified backend release archive (fails if logs or unverified artifacts exist)
+npm run pack:extension   # Packages a clean extension distribution archive (extension/examassist-extension.zip)
 
 # Server-Specific Commands
 cd server
-npm test              # Executes 123 node:test unit and integration tests
-npm run eval:smoke    # Fast deterministic pipeline validation (mock-based)
-npm run eval:gate     # Quality regression gate against full 236-question dataset
-npm run eval:code     # Multi-language coding evaluation and red-team containment
+npm test                 # Executes 152 node:test unit, seccomp, network, and integration tests
+npm run eval:smoke       # Fast deterministic pipeline validation (mock-based)
+npm run eval:gate        # Quality regression gate against full 236-question dataset
+npm run eval:code        # Multi-language coding evaluation and red-team containment
 
 # Extension-Specific Commands
 cd extension
-npm run typecheck     # Zero-error TypeScript compilation check (tsc --noEmit)
-npm test              # Vitest + jsdom read-only DOM adapter suite
-npm run test:e2e      # Playwright browser E2E tests against Monaco, CodeMirror & textarea
+npm run typecheck        # Zero-error TypeScript compilation check (tsc --noEmit)
+npm test                 # Vitest + jsdom DOM adapter and storage migration suite
+npm run test:e2e         # Playwright headless browser E2E test loading dist with --load-extension
 ```
+
+### 🛡️ Release Hardening & Verification Suite (v2.3.1)
+The v2.3.1 release includes comprehensive enterprise security, distribution, and runtime hardening:
+- **Sandbox Seccomp Enforcement**: Containerized sandbox explicitly mounts [`server/sandbox/seccomp-profile.json`](server/sandbox/seccomp-profile.json) via Docker Compose (`security_opt: ["no-new-privileges:true", "seccomp=..."]`), actively restricting dangerous system calls (`ptrace`, `bpf`, `kexec_load`).
+- **Network & Gateway Hardening**: Default localhost loopback binding (`HOST=127.0.0.1`), strict CORS origin allow-listing (`ALLOWED_ORIGINS` & `chrome-extension://${EXTENSION_ID}`), rejection of non-configured `null` origins, and proxy-aware (`trust proxy`) rate limiting backed by LRU memory or Redis.
+- **Chrome MV3 Distribution Integrity**: Automated manifest auditor (`npm run verify:dist`) guarantees all icons, content scripts, background workers, and HTML panels are packaged into `extension/dist/`.
+- **Non-Destructive Storage Migration**: `chrome.storage.local` updates run versioned migrations that preserve user-configured API bases and custom allowed domains without overwriting user data.
+- **Valid PNG Signatures & Decoders**: All extension icons (16px, 48px, 128px) are verified against the canonical PNG header `[137, 80, 78, 71, 13, 10, 26, 10]` and tested using real `pngjs` decoders.
+- **Evidence Honesty**: `npm run docs:verify` guarantees that every evaluation score cited in [`docs/EVAL_REPORT.md`](docs/EVAL_REPORT.md) is backed by an authentic JSON artifact in `server/eval/results/`.
+- **Node.js v25 ESM Compatibility**: Deterministic arithmetic engine uses `"mathjs/number"`, resolving ESM subpaths reliably across modern Node.js versions and preventing directory main resolution errors.
 
 ---
 

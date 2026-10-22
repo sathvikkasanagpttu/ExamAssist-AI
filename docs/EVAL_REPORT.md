@@ -47,7 +47,7 @@ To guarantee reproducibility and prevent synthetic score inflation, every entry 
 
 | Run ID | Model | Date | Config | Dataset Hash | Accuracy (%) | UNVERIFIED Wrong (%) | Latency p50 (ms) | Result Artifact |
 |---|---|---|---|---|---:|---:|---:|---|
-| `2026-10-12T19-32-40_a_single_pass_live` | `gemini-3.5-flash-lite` | 2026-10-12 | `a_single_pass` | `7fa18864...` | **91.53%** | **100.00%** | 6 | [`results/.gate-1433.json`](../server/eval/results/) |
+| `2026-10-12T19-32-40_a_single_pass_live` | `gemini-3.5-flash-lite` | 2026-10-12 | `a_single_pass` | `7fa18864...` | **91.53%** | **100.00%** | 6 | [`2026-10-12T19-32-40_a_single_pass.json`](../server/eval/results/2026-10-12T19-32-40_a_single_pass.json) |
 | *[Pending Live Run]* | *[Model]* | *[YYYY-MM-DD]* | `b_solve_evidence` | `7fa18864...` | — | — | — | — |
 | *[Pending Live Run]* | *[Model]* | *[YYYY-MM-DD]* | `c_solve_tiebreak` | `7fa18864...` | — | — | — | — |
 | *[Pending Live Run]* | *[Model]* | *[YYYY-MM-DD]* | `d_rag` | `7fa18864...` | — | — | — | — |

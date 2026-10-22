@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ExamAssist AI — Study & Assessment Copilot",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "description": "An evidence-first academic study assistant that captures questions and options, researches verified sources, and displays answers directly on assessment pages.",
   "permissions": [
     "storage",
@@ -59,14 +59,6 @@
         "https://*.instructure.com/*"
       ],
       "js": [
-        "extractors/BaseExtractor.js",
-        "extractors/EditorAdapters.js",
-        "extractors/ProblemAdapters.js",
-        "extractors/GenericExtractor.js",
-        "extractors/MoodleAdapter.js",
-        "extractors/CanvasAdapter.js",
-        "extractors/CustomPortalAdapter.js",
-        "extractors/ExtractionManager.js",
         "content.js"
       ],
       "css": [

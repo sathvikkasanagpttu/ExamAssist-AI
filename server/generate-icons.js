@@ -1,8 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
+import { fileURLToPath } from "node:url";
 
-function crc32(buf) {
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+export function crc32(buf) {
   let table = new Uint32Array(256);
   for (let i = 0; i < 256; i++) {
     let c = i;
@@ -18,20 +21,52 @@ function crc32(buf) {
   return (crc ^ (-1)) >>> 0;
 }
 
-function makeChunk(type, data) {
+export function makeChunk(type, data) {
   const len = data.length;
   const chunk = Buffer.alloc(12 + len);
   chunk.writeUInt32BE(len, 0);
   chunk.write(type, 4, 4, "ascii");
   data.copy(chunk, 8);
   const typeAndData = chunk.subarray(4, 8 + len);
-  const crc = crc32(typeAndData);
+  const crc = zlib.crc32 ? zlib.crc32(typeAndData) : crc32(typeAndData);
   chunk.writeUInt32BE(crc, 8 + len);
   return chunk;
 }
 
-function createPng(width, height) {
-  const header = Buffer.from([137, 80, 78, 72, 13, 10, 26, 10]);
+export function verifyPng(buffer) {
+  const signature = [137, 80, 78, 71, 13, 10, 26, 10];
+  if (buffer.length < 8) {
+    throw new Error("Buffer too short to be a PNG");
+  }
+  for (let i = 0; i < 8; i++) {
+    if (buffer[i] !== signature[i]) {
+      throw new Error(`Invalid PNG signature at byte ${i}: expected ${signature[i]}, got ${buffer[i]}`);
+    }
+  }
+  let offset = 8;
+  while (offset < buffer.length) {
+    if (offset + 12 > buffer.length) {
+      throw new Error(`Truncated PNG chunk header at offset ${offset}`);
+    }
+    const length = buffer.readUInt32BE(offset);
+    const type = buffer.subarray(offset + 4, offset + 8).toString("ascii");
+    if (offset + 12 + length > buffer.length) {
+      throw new Error(`Truncated PNG chunk data for ${type} at offset ${offset}`);
+    }
+    const dataAndType = buffer.subarray(offset + 4, offset + 8 + length);
+    const expectedCrc = buffer.readUInt32BE(offset + 8 + length);
+    const actualCrc = (zlib.crc32 ? zlib.crc32(dataAndType) : crc32(dataAndType)) >>> 0;
+    if (expectedCrc !== actualCrc) {
+      throw new Error(`CRC mismatch in chunk ${type}: expected ${expectedCrc}, got ${actualCrc}`);
+    }
+    offset += 12 + length;
+  }
+  return true;
+}
+
+export function createPng(width, height) {
+  // Correct PNG signature: 137, 80, 78, 71, 13, 10, 26, 10
+  const header = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
   const ihdrData = Buffer.alloc(13);
   ihdrData.writeUInt32BE(width, 0);
   ihdrData.writeUInt32BE(height, 4);
@@ -100,17 +135,28 @@ function createPng(width, height) {
   const idat = makeChunk("IDAT", compressedData);
   const iend = makeChunk("IEND", Buffer.alloc(0));
 
-  return Buffer.concat([header, ihdr, idat, iend]);
+  const png = Buffer.concat([header, ihdr, idat, iend]);
+  verifyPng(png);
+  return png;
 }
 
-const iconsDir = path.resolve("../extension/icons");
-if (!fs.existsSync(iconsDir)) {
-  fs.mkdirSync(iconsDir, { recursive: true });
+export function generateIcons(targetDir) {
+  const iconsDir = targetDir || path.resolve(__dirname, "../extension/icons");
+  if (!fs.existsSync(iconsDir)) {
+    fs.mkdirSync(iconsDir, { recursive: true });
+  }
+
+  const generated = [];
+  [16, 48, 128].forEach(size => {
+    const buf = createPng(size, size);
+    const dest = path.join(iconsDir, `icon-${size}.png`);
+    fs.writeFileSync(dest, buf);
+    generated.push({ size, dest, bytes: buf.length });
+    console.log(`Generated icon: ${dest} (${size}x${size}, ${buf.length} bytes)`);
+  });
+  return generated;
 }
 
-[16, 48, 128].forEach(size => {
-  const buf = createPng(size, size);
-  const dest = path.join(iconsDir, `icon-${size}.png`);
-  fs.writeFileSync(dest, buf);
-  console.log(`Generated icon: ${dest} (${size}x${size}, ${buf.length} bytes)`);
-});
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  generateIcons();
+}

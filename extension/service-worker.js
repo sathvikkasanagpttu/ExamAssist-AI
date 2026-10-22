@@ -1,8 +1,9 @@
-var __defProp = Object.defineProperty;
+var ExamAssist_service_worker = (function(exports) {
+  "use strict";var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
-(function() {
-  "use strict";
+
+  var _a2, _b, _c, _d;
   function getEnumValues(entries) {
     const numericValues = Object.values(entries).filter((v) => typeof v === "number");
     const values = Object.entries(entries).filter(([k, _]) => numericValues.indexOf(+k) === -1).map(([_, v]) => v);
@@ -127,11 +128,11 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     return typeof data === "object" && data !== null && !Array.isArray(data);
   }
   const allowsEval = /* @__PURE__ */ cached(() => {
-    var _a2;
+    var _a3;
     if (globalConfig.jitless) {
       return false;
     }
-    if (typeof navigator !== "undefined" && ((_a2 = navigator == null ? void 0 : navigator.userAgent) == null ? void 0 : _a2.includes("Cloudflare"))) {
+    if (typeof navigator !== "undefined" && ((_a3 = navigator == null ? void 0 : navigator.userAgent) == null ? void 0 : _a3.includes("Cloudflare"))) {
       return false;
     }
     try {
@@ -230,11 +231,11 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     return clone(schema, mergeDefs(currDef, { shape: newShape, checks: [] }));
   }
   function maskedKeys(schema, mask) {
-    var _a2;
+    var _a3;
     const raw = sourceShape(schema);
     const keys = [];
     for (const key of Reflect.ownKeys(mask)) {
-      if (!((_a2 = Object.getOwnPropertyDescriptor(raw, key)) == null ? void 0 : _a2.enumerable)) {
+      if (!((_a3 = Object.getOwnPropertyDescriptor(raw, key)) == null ? void 0 : _a3.enumerable)) {
         throw new Error(`Unrecognized key: "${String(key)}"`);
       }
       if (mask[key])
@@ -283,11 +284,11 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     return clone(schema, mergeDefs(schema._zod.def, { shape: extended(schema, shape) }));
   }
   function merge(a, b) {
-    var _a2, _b;
-    if (!((_a2 = b == null ? void 0 : b._zod) == null ? void 0 : _a2.def)) {
+    var _a3, _b2;
+    if (!((_a3 = b == null ? void 0 : b._zod) == null ? void 0 : _a3.def)) {
       throw new Error("Invalid input to merge: expected an object schema. To merge a plain shape, use `.extend()`.");
     }
-    if ((_b = a._zod.def.checks) == null ? void 0 : _b.length) {
+    if ((_b2 = a._zod.def.checks) == null ? void 0 : _b2.length) {
       throw new Error(".merge() cannot be used on object schemas containing refinements. Use .safeExtend() instead.");
     }
     const newShape = {};
@@ -324,22 +325,22 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     return clone(schema, mergeDefs(schema._zod.def, { shape: newShape }));
   }
   function aborted(x, startIndex = 0) {
-    var _a2;
+    var _a3;
     if (x.aborted === true)
       return true;
     for (let i = startIndex; i < x.issues.length; i++) {
-      if (((_a2 = x.issues[i]) == null ? void 0 : _a2.continue) !== true) {
+      if (((_a3 = x.issues[i]) == null ? void 0 : _a3.continue) !== true) {
         return true;
       }
     }
     return false;
   }
   function explicitlyAborted(x, startIndex = 0) {
-    var _a2;
+    var _a3;
     if (x.aborted === true)
       return true;
     for (let i = startIndex; i < x.issues.length; i++) {
-      if (((_a2 = x.issues[i]) == null ? void 0 : _a2.continue) === false) {
+      if (((_a3 = x.issues[i]) == null ? void 0 : _a3.continue) === false) {
         return true;
       }
     }
@@ -347,8 +348,8 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   }
   function prefixIssues(path, issues) {
     return issues.map((iss) => {
-      var _a2;
-      (_a2 = iss).path ?? (_a2.path = []);
+      var _a3;
+      (_a3 = iss).path ?? (_a3.path = []);
       iss.path.unshift(path);
       return iss;
     });
@@ -357,22 +358,22 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     return typeof message === "string" ? message : message == null ? void 0 : message.message;
   }
   function attachSchema(issues, start, inst) {
-    var _a2;
+    var _a3;
     for (let i = start; i < issues.length; i++) {
-      (_a2 = issues[i]).schema ?? (_a2.schema = inst);
+      (_a3 = issues[i]).schema ?? (_a3.schema = inst);
     }
   }
   function finalizeIssue(iss, ctx, config2) {
-    var _a3, _b, _c, _d, _e, _f, _g, _h, _i, _j;
-    var _a2;
-    const traits = (_b = (_a3 = iss.inst) == null ? void 0 : _a3._zod) == null ? void 0 : _b.traits;
+    var _a4, _b2, _c2, _d2, _e, _f, _g, _h, _i, _j;
+    var _a3;
+    const traits = (_b2 = (_a4 = iss.inst) == null ? void 0 : _a4._zod) == null ? void 0 : _b2.traits;
     if (traits == null ? void 0 : traits.has("$ZodType")) {
       if (traits.has("$ZodCheck"))
-        (_a2 = iss).schema ?? (_a2.schema = iss.inst);
+        (_a3 = iss).schema ?? (_a3.schema = iss.inst);
       else
         iss.schema = iss.inst;
     }
-    const schemaError = iss.schema !== iss.inst ? (_d = (_c = iss.schema) == null ? void 0 : _c._zod.def) == null ? void 0 : _d.error : void 0;
+    const schemaError = iss.schema !== iss.inst ? (_d2 = (_c2 = iss.schema) == null ? void 0 : _c2._zod.def) == null ? void 0 : _d2.error : void 0;
     const message = iss.message ? iss.message : unwrapMessage((_g = (_f = (_e = iss.inst) == null ? void 0 : _e._zod.def) == null ? void 0 : _f.error) == null ? void 0 : _g.call(_f, iss)) ?? unwrapMessage(schemaError == null ? void 0 : schemaError(iss)) ?? unwrapMessage((_h = ctx == null ? void 0 : ctx.error) == null ? void 0 : _h.call(ctx, iss)) ?? unwrapMessage((_i = config2.customError) == null ? void 0 : _i.call(config2, iss)) ?? unwrapMessage((_j = config2.localeError) == null ? void 0 : _j.call(config2, iss)) ?? "Invalid input";
     const full = {};
     for (const k of Object.keys(iss)) {
@@ -625,7 +626,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     }
     Object.defineProperty(Definition, "name", { value: name });
     function _(def) {
-      var _a2;
+      var _a3;
       const inst = (params == null ? void 0 : params.Parent) ? newError(Definition) : this;
       init(inst, def);
       const deferred = inst._zod.deferred;
@@ -635,7 +636,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         }
         inst._zod.deferred = void 0;
       }
-      const pp = (_a2 = globalThis.__zod_globalConfig) == null ? void 0 : _a2.postProcessor;
+      const pp = (_a3 = globalThis.__zod_globalConfig) == null ? void 0 : _a3.postProcessor;
       if (pp)
         pp(inst);
       return inst;
@@ -643,10 +644,10 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     Object.defineProperty(_, "init", { value: init });
     Object.defineProperty(_, Symbol.hasInstance, {
       value: (inst) => {
-        var _a2, _b;
+        var _a3, _b2;
         if ((params == null ? void 0 : params.Parent) && inst instanceof params.Parent)
           return true;
-        return (_b = (_a2 = inst == null ? void 0 : inst._zod) == null ? void 0 : _a2.traits) == null ? void 0 : _b.has(name);
+        return (_b2 = (_a3 = inst == null ? void 0 : inst._zod) == null ? void 0 : _a3.traits) == null ? void 0 : _b2.has(name);
       }
     });
     Object.defineProperty(_, "name", { value: name });
@@ -983,10 +984,10 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
   const lowercase = /^[^A-Z]*$/;
   const uppercase = /^[^a-z]*$/;
   const $ZodCheck = /* @__PURE__ */ $constructor("$ZodCheck", (inst, def) => {
-    var _a2;
+    var _a3;
     inst._zod ?? (inst._zod = {});
     inst._zod.def = def;
-    (_a2 = inst._zod).onattach ?? (_a2.onattach = []);
+    (_a3 = inst._zod).onattach ?? (_a3.onattach = []);
   });
   const _whenHasLength = (payload) => {
     const val = payload.value;
@@ -1055,10 +1056,10 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     };
   });
   const $ZodCheckNumberFormat = /* @__PURE__ */ $constructor("$ZodCheckNumberFormat", (inst, def) => {
-    var _a2;
+    var _a3;
     $ZodCheck.init(inst, def);
     def.format = def.format || "float64";
-    const isInt = (_a2 = def.format) == null ? void 0 : _a2.includes("int");
+    const isInt = (_a3 = def.format) == null ? void 0 : _a3.includes("int");
     const origin = isInt ? "int" : "number";
     const [minimum, maximum] = NUMBER_FORMAT_RANGES[def.format];
     inst._zod.check = (payload) => {
@@ -1127,9 +1128,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     };
   });
   const $ZodCheckMaxLength = /* @__PURE__ */ $constructor("$ZodCheckMaxLength", (inst, def) => {
-    var _a2;
+    var _a3;
     $ZodCheck.init(inst, def);
-    (_a2 = inst._zod.def).when ?? (_a2.when = _whenHasLength);
+    (_a3 = inst._zod.def).when ?? (_a3.when = _whenHasLength);
     inst._zod.check = (payload) => {
       const input = payload.value;
       const units = input.length;
@@ -1149,9 +1150,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     };
   });
   const $ZodCheckMinLength = /* @__PURE__ */ $constructor("$ZodCheckMinLength", (inst, def) => {
-    var _a2;
+    var _a3;
     $ZodCheck.init(inst, def);
-    (_a2 = inst._zod.def).when ?? (_a2.when = _whenHasLength);
+    (_a3 = inst._zod.def).when ?? (_a3.when = _whenHasLength);
     inst._zod.check = (payload) => {
       const input = payload.value;
       const units = input.length;
@@ -1171,9 +1172,9 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     };
   });
   const $ZodCheckLengthEquals = /* @__PURE__ */ $constructor("$ZodCheckLengthEquals", (inst, def) => {
-    var _a2;
+    var _a3;
     $ZodCheck.init(inst, def);
-    (_a2 = inst._zod.def).when ?? (_a2.when = _whenHasLength);
+    (_a3 = inst._zod.def).when ?? (_a3.when = _whenHasLength);
     inst._zod.check = (payload) => {
       const input = payload.value;
       const units = input.length;
@@ -1194,10 +1195,10 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     };
   });
   const $ZodCheckStringFormat = /* @__PURE__ */ $constructor("$ZodCheckStringFormat", (inst, def) => {
-    var _a2, _b;
+    var _a3, _b2;
     $ZodCheck.init(inst, def);
     if (def.pattern)
-      (_a2 = inst._zod).check ?? (_a2.check = (payload) => {
+      (_a3 = inst._zod).check ?? (_a3.check = (payload) => {
         def.pattern.lastIndex = 0;
         if (def.pattern.test(payload.value))
           return;
@@ -1212,7 +1213,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         });
       });
     else
-      (_b = inst._zod).check ?? (_b.check = () => {
+      (_b2 = inst._zod).check ?? (_b2.check = () => {
       });
   });
   const $ZodCheckRegex = /* @__PURE__ */ $constructor("$ZodCheckRegex", (inst, def) => {
@@ -1346,8 +1347,8 @@ ${content.join("\n")}
     patch: 5
   };
   const $ZodType = /* @__PURE__ */ $constructor("$ZodType", (inst, def) => {
+    var _a4;
     var _a3;
-    var _a2;
     inst ?? (inst = {});
     inst._zod.def = def;
     inst._zod.bag = inst._zod.bag || {};
@@ -1360,8 +1361,8 @@ ${content.join("\n")}
       }
     }
     if (checks.length === 0) {
-      (_a2 = inst._zod).deferred ?? (_a2.deferred = []);
-      (_a3 = inst._zod.deferred) == null ? void 0 : _a3.push(() => {
+      (_a3 = inst._zod).deferred ?? (_a3.deferred = []);
+      (_a4 = inst._zod.deferred) == null ? void 0 : _a4.push(() => {
         inst._zod.run = inst._zod.parse;
       });
     } else {
@@ -1547,8 +1548,8 @@ ${content.join("\n")}
     return parseURLObject(trimmed, def);
   }
   function parseURLObject(trimmed, def) {
-    var _a2;
-    if (!def.normalize && ((_a2 = def.protocol) == null ? void 0 : _a2.source) === httpProtocol.source && !/^https?:\/\//i.test(trimmed)) {
+    var _a3;
+    if (!def.normalize && ((_a3 = def.protocol) == null ? void 0 : _a3.source) === httpProtocol.source && !/^https?:\/\//i.test(trimmed)) {
       return URL_BAD_FORMAT;
     }
     try {
@@ -1981,13 +1982,13 @@ ${content.join("\n")}
   }
   const NO_SYMBOL_KEYS = [];
   function normalizeDef(def) {
-    var _a2, _b, _c, _d;
+    var _a3, _b2, _c2, _d2;
     const keys = Object.keys(def.shape);
     const ownSymbols = Object.getOwnPropertySymbols(def.shape);
     const symbolKeys = ownSymbols.length ? ownSymbols : NO_SYMBOL_KEYS;
     const allKeys = symbolKeys.length ? [...keys, ...symbolKeys] : keys;
     for (const k of allKeys) {
-      if (!((_d = (_c = (_b = (_a2 = def.shape) == null ? void 0 : _a2[k]) == null ? void 0 : _b._zod) == null ? void 0 : _c.traits) == null ? void 0 : _d.has("$ZodType"))) {
+      if (!((_d2 = (_c2 = (_b2 = (_a3 = def.shape) == null ? void 0 : _a3[k]) == null ? void 0 : _b2._zod) == null ? void 0 : _c2.traits) == null ? void 0 : _d2.has("$ZodType"))) {
         throw new Error(`Invalid element at key "${String(k)}": expected a Zod schema`);
       }
     }
@@ -2134,7 +2135,7 @@ ${content.join("\n")}
     const _normalized = cached(() => normalizeDef(def));
     const memo2 = globalConfig.memoizer;
     const generateFastpass = (shape) => {
-      var _a2, _b;
+      var _a3, _b2;
       const normalized = _normalized.value;
       const syms = normalized.symbolKeys;
       const doc = new Doc(["payload", "ctx"], { shape, inst, memo: memo2, syms });
@@ -2165,9 +2166,9 @@ ${content.join("\n")}
         const k = typeof key === "symbol" ? `syms[${syms.indexOf(key)}]` : esc(key);
         const isPresent = `${k} in input`;
         const schema = shape[key];
-        const optin = (_a2 = schema == null ? void 0 : schema._zod) == null ? void 0 : _a2.optin;
+        const optin = (_a3 = schema == null ? void 0 : schema._zod) == null ? void 0 : _a3.optin;
         const isOptionalIn = optin !== void 0;
-        const isOptionalOut = ((_b = schema == null ? void 0 : schema._zod) == null ? void 0 : _b.optout) === "optional";
+        const isOptionalOut = ((_b2 = schema == null ? void 0 : schema._zod) == null ? void 0 : _b2.optout) === "optional";
         doc.write(`const ${id} = ${parseStr(k)};`);
         if (isOptionalIn && isOptionalOut) {
           const assign = optin === "optional" ? `${id}_present` : `${id}.value !== undefined || ${id}_present`;
@@ -2322,10 +2323,10 @@ ${content.join("\n")}
     };
   });
   function discriminatorMap(def) {
-    var _a2;
+    var _a3;
     const map = /* @__PURE__ */ new Map();
     for (const option of def.options) {
-      const values = (_a2 = option._zod.propValues) == null ? void 0 : _a2[def.discriminator];
+      const values = (_a3 = option._zod.propValues) == null ? void 0 : _a3[def.discriminator];
       if (!values || values.size === 0)
         throw new Error(`Invalid discriminated union option at index "${def.options.indexOf(option)}"`);
       for (const value of values) {
@@ -2345,14 +2346,14 @@ ${content.join("\n")}
     $ZodUnion.init(inst, def);
     const _super = inst._zod.parse;
     defineLazyInternal(inst, "propValues", (zod) => {
-      var _a2, _b;
+      var _a3, _b2;
       const propValues = {};
       let undefinedCount = 0;
       for (const option of zod.def.options) {
         const pv = option._zod.propValues;
         if (!pv || Object.keys(pv).length === 0)
           throw new Error(`Invalid discriminated union option at index "${zod.def.options.indexOf(option)}"`);
-        if ((_a2 = pv[zod.def.discriminator]) == null ? void 0 : _a2.has(void 0))
+        if ((_a3 = pv[zod.def.discriminator]) == null ? void 0 : _a3.has(void 0))
           undefinedCount++;
         for (const [k, v] of Object.entries(pv)) {
           if (!Object.prototype.hasOwnProperty.call(propValues, k)) {
@@ -2364,7 +2365,7 @@ ${content.join("\n")}
         }
       }
       if (!zod.def.unionFallback && undefinedCount > 1)
-        (_b = propValues[zod.def.discriminator]) == null ? void 0 : _b.delete(void 0);
+        (_b2 = propValues[zod.def.discriminator]) == null ? void 0 : _b2.delete(void 0);
       return propValues;
     });
     def.options.forEach((option, i) => {
@@ -2474,12 +2475,12 @@ ${content.join("\n")}
     let unrecIssue;
     const keyIssues = /* @__PURE__ */ new Map();
     const collect = (iss, side) => {
-      var _a2, _b;
+      var _a3, _b2;
       let keys;
-      if (iss.code === "unrecognized_keys" && !((_a2 = iss.path) == null ? void 0 : _a2.length)) {
+      if (iss.code === "unrecognized_keys" && !((_a3 = iss.path) == null ? void 0 : _a3.length)) {
         unrecIssue ?? (unrecIssue = iss);
         keys = iss.keys;
-      } else if (iss.code === "invalid_key" && iss.origin === "record" && ((_b = iss.path) == null ? void 0 : _b.length) === 1) {
+      } else if (iss.code === "invalid_key" && iss.origin === "record" && ((_b2 = iss.path) == null ? void 0 : _b2.length) === 1) {
         const k = String(iss.path[0]);
         if (!keyIssues.has(k))
           keyIssues.set(k, iss);
@@ -2722,10 +2723,10 @@ ${content.join("\n")}
     };
   });
   const $ZodTransform = /* @__PURE__ */ $constructor("$ZodTransform", (inst, def) => {
-    var _a2;
+    var _a3;
     $ZodType.init(inst, def);
     inst._zod.optin = "optional";
-    (_a2 = globalConfig.memoizer) == null ? void 0 : _a2.guard(inst);
+    (_a3 = globalConfig.memoizer) == null ? void 0 : _a3.guard(inst);
     inst._zod.parse = (payload, ctx) => {
       if (ctx.direction === "backward") {
         throw new $ZodEncodeError(inst.constructor.name);
@@ -2928,12 +2929,12 @@ ${content.join("\n")}
     defineLazyInternal(inst, "propValues", (zod) => zod.def.innerType._zod.propValues);
     defineLazyInternal(inst, "values", (zod) => zod.def.innerType._zod.values);
     defineLazyInternal(inst, "optin", (zod) => {
-      var _a2, _b;
-      return (_b = (_a2 = zod.def.innerType) == null ? void 0 : _a2._zod) == null ? void 0 : _b.optin;
+      var _a3, _b2;
+      return (_b2 = (_a3 = zod.def.innerType) == null ? void 0 : _a3._zod) == null ? void 0 : _b2.optin;
     });
     defineLazyInternal(inst, "optout", (zod) => {
-      var _a2, _b;
-      return (_b = (_a2 = zod.def.innerType) == null ? void 0 : _a2._zod) == null ? void 0 : _b.optout;
+      var _a3, _b2;
+      return (_b2 = (_a3 = zod.def.innerType) == null ? void 0 : _a3._zod) == null ? void 0 : _b2.optout;
     });
     inst._zod.parse = (payload, ctx) => {
       if (ctx.direction === "backward") {
@@ -3018,13 +3019,13 @@ ${content.join("\n")}
       }
     };
     const shape = (sh, spread) => {
-      var _a2;
+      var _a3;
       let answer = NONE;
       for (const key of Reflect.ownKeys(sh)) {
         const desc = Object.getOwnPropertyDescriptor(sh, key);
         if (!desc.enumerable)
           continue;
-        const child = desc.get ? ASSUMED : ((_a2 = desc.value) == null ? void 0 : _a2._zod) ? isRecursive(desc.value, stack) : NONE;
+        const child = desc.get ? ASSUMED : ((_a3 = desc.value) == null ? void 0 : _a3._zod) ? isRecursive(desc.value, stack) : NONE;
         if (child > answer)
           answer = child;
       }
@@ -3161,8 +3162,8 @@ ${content.join("\n")}
       return empty;
     },
     guard(inst) {
-      var _a2;
-      (_a2 = inst._zod).deferred ?? (_a2.deferred = []);
+      var _a3;
+      (_a3 = inst._zod).deferred ?? (_a3.deferred = []);
       inst._zod.deferred.push(() => {
         const base = inst._zod.parse;
         const wrapped = (payload, ctx) => {
@@ -3176,12 +3177,12 @@ ${content.join("\n")}
       });
     },
     attach(inst) {
-      var _a2;
+      var _a3;
       let isRecursiveInst;
       let rechecked = false;
       let lastCtx;
       let lastBucket;
-      (_a2 = inst._zod).deferred ?? (_a2.deferred = []);
+      (_a3 = inst._zod).deferred ?? (_a3.deferred = []);
       inst._zod.deferred.push(() => {
         const base = inst._zod.parse;
         const wrapped = (payload, ctx) => {
@@ -3253,8 +3254,8 @@ ${content.join("\n")}
     return memo;
   }
   function isBackEdge(ctx, value) {
-    var _a2;
-    const backEdges = (_a2 = ctx[STATE]) == null ? void 0 : _a2.backEdges;
+    var _a3;
+    const backEdges = (_a3 = ctx[STATE]) == null ? void 0 : _a3.backEdges;
     return backEdges !== void 0 && isRef(value) && backEdges.has(value);
   }
   const error = () => {
@@ -3983,8 +3984,8 @@ ${content.join("\n")}
     return true;
   }
   function processSchema(schema, ctx, _params = { path: [], schemaPath: [] }) {
-    var _a3, _b;
-    var _a2;
+    var _a4, _b2;
+    var _a3;
     const def = schema._zod.def;
     const seen = ctx.seen.get(schema);
     if (seen) {
@@ -3999,7 +4000,7 @@ ${content.join("\n")}
     ctx.seen.set(schema, result);
     ctx.sharedDefsExtractedFor = void 0;
     ctx.sharedEmitDoneFor = void 0;
-    const overrideSchema = (_b = (_a3 = schema._zod).toJSONSchema) == null ? void 0 : _b.call(_a3);
+    const overrideSchema = (_b2 = (_a4 = schema._zod).toJSONSchema) == null ? void 0 : _b2.call(_a4);
     if (overrideSchema) {
       result.schema = overrideSchema;
     } else {
@@ -4034,7 +4035,7 @@ ${content.join("\n")}
       delete result.schema.default;
     }
     if (ctx.io === "input" && "_prefault" in result.schema)
-      (_a2 = result.schema).default ?? (_a2.default = result.schema._prefault);
+      (_a3 = result.schema).default ?? (_a3.default = result.schema._prefault);
     delete result.schema._prefault;
     const _result = ctx.seen.get(schema);
     return _result.schema;
@@ -4043,7 +4044,7 @@ ${content.join("\n")}
     return segment.replace(/~/g, "~0").replace(/\//g, "~1");
   }
   function extractDefs(ctx, schema) {
-    var _a2, _b, _c, _d;
+    var _a3, _b2, _c2, _d2;
     const root = ctx.seen.get(schema);
     if (!root)
       throw new Error("Unprocessed schema. This is a bug in Zod.");
@@ -4051,7 +4052,7 @@ ${content.join("\n")}
       return;
     const idToSchema = /* @__PURE__ */ new Map();
     for (const entry of ctx.seen.entries()) {
-      const id = (_a2 = ctx.metadataRegistry.get(entry[0])) == null ? void 0 : _a2.id;
+      const id = (_a3 = ctx.metadataRegistry.get(entry[0])) == null ? void 0 : _a3.id;
       if (id) {
         const existing = idToSchema.get(id);
         if (existing && existing !== entry[0]) {
@@ -4061,10 +4062,10 @@ ${content.join("\n")}
       }
     }
     const makeURI = (entry) => {
-      var _a3;
+      var _a4;
       const defsSegment = ctx.target === "draft-2020-12" ? "$defs" : "definitions";
       if (ctx.external) {
-        const externalId = (_a3 = ctx.external.registry.get(entry[0])) == null ? void 0 : _a3.id;
+        const externalId = (_a4 = ctx.external.registry.get(entry[0])) == null ? void 0 : _a4.id;
         const uriGenerator = ctx.external.uri ?? ((id2) => id2);
         if (externalId) {
           return { ref: uriGenerator(externalId) };
@@ -4100,7 +4101,7 @@ ${content.join("\n")}
       for (const entry of ctx.seen.entries()) {
         const seen = entry[1];
         if (seen.cycle) {
-          throw new Error(`Cycle detected: #/${(_b = seen.cycle) == null ? void 0 : _b.join("/")}/<root>
+          throw new Error(`Cycle detected: #/${(_b2 = seen.cycle) == null ? void 0 : _b2.join("/")}/<root>
 
 Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.`);
         }
@@ -4113,13 +4114,13 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
         continue;
       }
       if (ctx.external) {
-        const ext = (_c = ctx.external.registry.get(entry[0])) == null ? void 0 : _c.id;
+        const ext = (_c2 = ctx.external.registry.get(entry[0])) == null ? void 0 : _c2.id;
         if (schema !== entry[0] && ext) {
           extractToDef(entry);
           continue;
         }
       }
-      const id = (_d = ctx.metadataRegistry.get(entry[0])) == null ? void 0 : _d.id;
+      const id = (_d2 = ctx.metadataRegistry.get(entry[0])) == null ? void 0 : _d2.id;
       if (id) {
         extractToDef(entry);
         continue;
@@ -4169,7 +4170,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     return Object.keys(extra).length ? extra : null;
   }
   function foldObjects(members2) {
-    var _a2;
+    var _a3;
     const objects = [];
     for (const member of members2) {
       if (typeof member !== "object" || member.type !== "object")
@@ -4188,7 +4189,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
           continue;
         const parts = [];
         for (const other of objects) {
-          const part = ((_a2 = other.properties) == null ? void 0 : _a2[key]) ?? undeclaredConstraint(other);
+          const part = ((_a3 = other.properties) == null ? void 0 : _a3[key]) ?? undeclaredConstraint(other);
           if (part === null || part === void 0)
             continue;
           if (!parts.some((seen) => JSON.stringify(seen) === JSON.stringify(part)))
@@ -4247,7 +4248,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     assignProps(json, folded);
   }
   function finalize(ctx, schema) {
-    var _a2, _b, _c, _d;
+    var _a3, _b2, _c2, _d2;
     const root = ctx.seen.get(schema);
     if (!root)
       throw new Error("Unprocessed schema. This is a bug in Zod.");
@@ -4353,17 +4354,17 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       result.$schema = "http://json-schema.org/draft-04/schema#";
     } else if (ctx.target === "openapi-3.0") ;
     else ;
-    if ((_a2 = ctx.external) == null ? void 0 : _a2.uri) {
-      const id = (_b = ctx.external.registry.get(schema)) == null ? void 0 : _b.id;
+    if ((_a3 = ctx.external) == null ? void 0 : _a3.uri) {
+      const id = (_b2 = ctx.external.registry.get(schema)) == null ? void 0 : _b2.id;
       if (!id)
         throw new Error("Schema is missing an `id` property");
       result.$id = ctx.external.uri(id);
     }
     assignProps(result, root.defId ? root.schema : root.def ?? root.schema);
-    const rootMetaId = (_c = ctx.metadataRegistry.get(schema)) == null ? void 0 : _c.id;
+    const rootMetaId = (_c2 = ctx.metadataRegistry.get(schema)) == null ? void 0 : _c2.id;
     if (rootMetaId !== void 0 && result.id === rootMetaId)
       delete result.id;
-    const defs = ((_d = ctx.external) == null ? void 0 : _d.defs) ?? {};
+    const defs = ((_d2 = ctx.external) == null ? void 0 : _d2.defs) ?? {};
     if (!ctx.external || ctx.sharedEmitDoneFor !== ctx.external) {
       for (const entry of ctx.seen.entries()) {
         const seen = entry[1];
@@ -4531,12 +4532,12 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     mime_type: (agg, def) => intersectMime(agg, def.mime)
   };
   function aggregateChecks(schema) {
-    var _a2;
+    var _a3;
     const agg = {};
     const def = schema._zod.def;
     const list = schema._zod.traits.has("$ZodCheck") ? [schema, ...def.checks ?? []] : def.checks ?? [];
     for (const ch of list)
-      (_a2 = contributors[ch._zod.def.check]) == null ? void 0 : _a2.call(contributors, agg, ch._zod.def);
+      (_a3 = contributors[ch._zod.def.check]) == null ? void 0 : _a3.call(contributors, agg, ch._zod.def);
     const bag = schema._zod.bag;
     if (bag.minimum !== void 0)
       narrowMin(agg, "minimum", bag.minimum);
@@ -4740,7 +4741,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     return schema._zod.optin;
   }
   const objectProcessor = (schema, ctx, _json, params) => {
-    var _a2;
+    var _a3;
     const json = _json;
     const def = schema._zod.def;
     const shape = def.shape;
@@ -4766,7 +4767,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     if (requiredKeys.length > 0) {
       json.required = requiredKeys;
     }
-    if (((_a2 = def.catchall) == null ? void 0 : _a2._zod.def.type) === "never") {
+    if (((_a3 = def.catchall) == null ? void 0 : _a3._zod.def.type) === "never") {
       json.additionalProperties = false;
     } else if (!def.catchall) {
       if (ctx.io === "output")
@@ -4810,12 +4811,12 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     ctx.intersections.push(allOf);
   };
   function stringifyKeyNames(bySchema, json, visited) {
-    var _a2;
+    var _a3;
     if (json.$ref) {
       if (visited.has(json))
         return json;
       visited.add(json);
-      const def = (_a2 = bySchema.get(json)) == null ? void 0 : _a2.def;
+      const def = (_a3 = bySchema.get(json)) == null ? void 0 : _a3.def;
       if (!def)
         return json;
       const inlined = stringifyKeyNames(bySchema, def, visited);
@@ -4848,7 +4849,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
   }
   const pendingRecords = /* @__PURE__ */ new WeakMap();
   function rewriteKeyNames(ctx) {
-    var _a2;
+    var _a3;
     const bySchema = /* @__PURE__ */ new Map();
     for (const entry of ctx.seen.values()) {
       if (entry.def && !bySchema.has(entry.schema))
@@ -4857,7 +4858,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     const rewrites = /* @__PURE__ */ new Map();
     for (const record2 of pendingRecords.get(ctx) ?? []) {
       const seen = ctx.seen.get(record2);
-      const names = (_a2 = (seen == null ? void 0 : seen.def) ?? (seen == null ? void 0 : seen.schema)) == null ? void 0 : _a2.propertyNames;
+      const names = (_a3 = (seen == null ? void 0 : seen.def) ?? (seen == null ? void 0 : seen.schema)) == null ? void 0 : _a3.propertyNames;
       if (!names || names === true || rewrites.has(names))
         continue;
       const rewritten = stringifyKeyNames(bySchema, names, /* @__PURE__ */ new Set());
@@ -5234,8 +5235,8 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     },
     // Reads through to the registry on every access, so it must not cache.
     get description() {
-      var _a2;
-      return (_a2 = globalRegistry.get(this)) == null ? void 0 : _a2.description;
+      var _a3;
+      return (_a3 = globalRegistry.get(this)) == null ? void 0 : _a3.description;
     },
     // No setter: `schema._def = x` throws, as it did when `_def` was a non-writable own property.
     get _def() {
@@ -6351,7 +6352,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     return s;
   }
   function detectLanguageFromPage(doc = document) {
-    var _a2;
+    var _a3;
     const selectors = [
       "[data-cy='lang-select']",
       ".language-selector",
@@ -6364,7 +6365,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     for (const sel of selectors) {
       const el = doc.querySelector(sel);
       if (el) {
-        const val = "value" in el && el.value || ((_a2 = el.getAttribute) == null ? void 0 : _a2.call(el, "data-lang")) || el.textContent || "";
+        const val = "value" in el && el.value || ((_a3 = el.getAttribute) == null ? void 0 : _a3.call(el, "data-lang")) || el.textContent || "";
         const norm = normalizeLanguage(val);
         if (norm) return norm;
       }
@@ -6402,10 +6403,10 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       return Boolean(doc.querySelector(".monaco-editor, [data-mode-id]"));
     }
     extract(doc = document) {
-      var _a2, _b, _c;
+      var _a3, _b2, _c2;
       const editorEl = doc.querySelector(".monaco-editor, [data-mode-id]");
       if (!editorEl) return null;
-      const modeAttr = ((_a2 = editorEl.getAttribute) == null ? void 0 : _a2.call(editorEl, "data-mode-id")) || ((_c = (_b = editorEl.closest) == null ? void 0 : _b.call(editorEl, "[data-mode-id]")) == null ? void 0 : _c.getAttribute("data-mode-id")) || "";
+      const modeAttr = ((_a3 = editorEl.getAttribute) == null ? void 0 : _a3.call(editorEl, "data-mode-id")) || ((_c2 = (_b2 = editorEl.closest) == null ? void 0 : _b2.call(editorEl, "[data-mode-id]")) == null ? void 0 : _c2.getAttribute("data-mode-id")) || "";
       const lineEls = editorEl.querySelectorAll(".view-lines .view-line, .view-line");
       let code = "";
       if (lineEls.length > 0) {
@@ -6433,7 +6434,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       return Boolean(doc.querySelector(".cm-editor .cm-content, .cm-content[contenteditable]"));
     }
     extract(doc = document) {
-      var _a2, _b, _c;
+      var _a3, _b2, _c2;
       const contentEl = doc.querySelector(".cm-editor .cm-content, .cm-content[contenteditable]");
       if (!contentEl) return null;
       const lineEls = contentEl.querySelectorAll(".cm-line");
@@ -6443,7 +6444,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       } else {
         code = (contentEl.innerText || contentEl.textContent || "").trim();
       }
-      const langAttr = ((_a2 = contentEl.getAttribute) == null ? void 0 : _a2.call(contentEl, "data-language")) || ((_c = (_b = contentEl.closest) == null ? void 0 : _b.call(contentEl, ".cm-editor")) == null ? void 0 : _c.getAttribute("data-language")) || "";
+      const langAttr = ((_a3 = contentEl.getAttribute) == null ? void 0 : _a3.call(contentEl, "data-language")) || ((_c2 = (_b2 = contentEl.closest) == null ? void 0 : _b2.call(contentEl, ".cm-editor")) == null ? void 0 : _c2.getAttribute("data-language")) || "";
       return ExtractedEditorStateSchema.parse({
         adapter: this.name,
         code: code.trim(),
@@ -6462,7 +6463,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       return Boolean(doc.querySelector(".CodeMirror"));
     }
     extract(doc = document) {
-      var _a2;
+      var _a3;
       const cmEl = doc.querySelector(".CodeMirror");
       if (!cmEl) return null;
       const lineEls = cmEl.querySelectorAll(".CodeMirror-line");
@@ -6472,7 +6473,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       } else {
         code = (cmEl.innerText || cmEl.textContent || "").trim();
       }
-      const langAttr = ((_a2 = cmEl.getAttribute) == null ? void 0 : _a2.call(cmEl, "data-mode")) || "";
+      const langAttr = ((_a3 = cmEl.getAttribute) == null ? void 0 : _a3.call(cmEl, "data-mode")) || "";
       return ExtractedEditorStateSchema.parse({
         adapter: this.name,
         code: code.trim(),
@@ -6491,7 +6492,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       return Boolean(doc.querySelector(".ace_editor"));
     }
     extract(doc = document) {
-      var _a2, _b;
+      var _a3, _b2;
       const aceEl = doc.querySelector(".ace_editor");
       if (!aceEl) return null;
       const lineEls = aceEl.querySelectorAll(".ace_line");
@@ -6501,7 +6502,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       } else {
         code = (aceEl.innerText || aceEl.textContent || "").trim();
       }
-      const langAttr = ((_a2 = aceEl.getAttribute) == null ? void 0 : _a2.call(aceEl, "data-mode")) || ((_b = aceEl.getAttribute) == null ? void 0 : _b.call(aceEl, "data-language")) || "";
+      const langAttr = ((_a3 = aceEl.getAttribute) == null ? void 0 : _a3.call(aceEl, "data-mode")) || ((_b2 = aceEl.getAttribute) == null ? void 0 : _b2.call(aceEl, "data-language")) || "";
       return ExtractedEditorStateSchema.parse({
         adapter: this.name,
         code: code.trim(),
@@ -6522,13 +6523,13 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       );
     }
     extract(doc = document) {
-      var _a2, _b;
+      var _a3, _b2;
       const ta = doc.querySelector(
         "textarea.code-editor, textarea[name*='code' i], textarea[id*='code' i], textarea[data-code-editor]"
       );
       if (!ta) return null;
       const code = (ta.value !== void 0 ? ta.value : ta.textContent) || "";
-      const langAttr = ((_a2 = ta.getAttribute) == null ? void 0 : _a2.call(ta, "data-language")) || ((_b = ta.getAttribute) == null ? void 0 : _b.call(ta, "data-lang")) || "";
+      const langAttr = ((_a3 = ta.getAttribute) == null ? void 0 : _a3.call(ta, "data-language")) || ((_b2 = ta.getAttribute) == null ? void 0 : _b2.call(ta, "data-lang")) || "";
       return ExtractedEditorStateSchema.parse({
         adapter: this.name,
         code: String(code).trim(),
@@ -6547,10 +6548,10 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       return Boolean(doc.querySelector("pre code, pre.code-block, .highlight pre"));
     }
     extract(doc = document) {
-      var _a2;
+      var _a3;
       const el = doc.querySelector("pre code, pre.code-block, .highlight pre");
       if (!el) return null;
-      const cls = el.className || ((_a2 = el.parentElement) == null ? void 0 : _a2.className) || "";
+      const cls = el.className || ((_a3 = el.parentElement) == null ? void 0 : _a3.className) || "";
       const langMatch = cls.match(/language-([a-z0-9_+]+)/i) || cls.match(/lang-([a-z0-9_+]+)/i);
       const code = (el.innerText || el.textContent || "").trim();
       return ExtractedEditorStateSchema.parse({
@@ -6673,8 +6674,8 @@ ${code}`.toLowerCase();
       );
     }
     extract(doc = document) {
-      var _a2, _b;
-      const title = (((_a2 = doc.querySelector(".challenge-view h1, .hr-challenge-title, .page-label")) == null ? void 0 : _a2.textContent) || "").trim();
+      var _a3, _b2;
+      const title = (((_a3 = doc.querySelector(".challenge-view h1, .hr-challenge-title, .page-label")) == null ? void 0 : _a3.textContent) || "").trim();
       const bodyEl = doc.querySelector(".challenge-body-html, .hr-challenge-body, .problem-statement");
       const statement = ((bodyEl == null ? void 0 : bodyEl.innerText) || (bodyEl == null ? void 0 : bodyEl.textContent) || "").trim();
       const constraintsEl = doc.querySelector(".challenge_constraints, .constraints");
@@ -6699,7 +6700,7 @@ ${code}`.toLowerCase();
         sampleTests.push(...parseSampleTestsFromText(statement));
       }
       const editor = extractEditorState(doc);
-      const failingOutput = editor.consoleOutput || (((_b = doc.querySelector(".testcase-error, .compile-error")) == null ? void 0 : _b.textContent) || "").trim();
+      const failingOutput = editor.consoleOutput || (((_b2 = doc.querySelector(".testcase-error, .compile-error")) == null ? void 0 : _b2.textContent) || "").trim();
       return ExtractedCodingProblemSchema.parse({
         platform: this.platform,
         questionSubType: detectCodingSubType({ statement, code: editor.code, failingOutput }),
@@ -6728,8 +6729,8 @@ ${code}`.toLowerCase();
       );
     }
     extract(doc = document) {
-      var _a2, _b;
-      const title = (((_a2 = doc.querySelector("[data-cy='question-title'], .text-title-large, .question-title")) == null ? void 0 : _a2.textContent) || "").trim();
+      var _a3, _b2;
+      const title = (((_a3 = doc.querySelector("[data-cy='question-title'], .text-title-large, .question-title")) == null ? void 0 : _a3.textContent) || "").trim();
       const descEl = doc.querySelector(
         "[data-track-load='description_content'], .elfjS, .question-content__JfgR"
       );
@@ -6737,7 +6738,7 @@ ${code}`.toLowerCase();
       const parsedSections = extractSectionsFromText(statement);
       const sampleTests = parseSampleTestsFromText(statement);
       const editor = extractEditorState(doc);
-      const failingOutput = editor.consoleOutput || (((_b = doc.querySelector("[data-e2e-locator='console-result']")) == null ? void 0 : _b.textContent) || "").trim();
+      const failingOutput = editor.consoleOutput || (((_b2 = doc.querySelector("[data-e2e-locator='console-result']")) == null ? void 0 : _b2.textContent) || "").trim();
       return ExtractedCodingProblemSchema.parse({
         platform: this.platform,
         questionSubType: detectCodingSubType({ statement, code: editor.code, failingOutput }),
@@ -6764,8 +6765,8 @@ ${code}`.toLowerCase();
       return Boolean(doc.querySelector(".problems_problem_content__Xm_eO, .problem-statement-gfg, #problem-statement"));
     }
     extract(doc = document) {
-      var _a2;
-      const title = (((_a2 = doc.querySelector(".problems_header_content__title__L2cB2, .problem-title, h3.gfg-title")) == null ? void 0 : _a2.textContent) || "").trim();
+      var _a3;
+      const title = (((_a3 = doc.querySelector(".problems_header_content__title__L2cB2, .problem-title, h3.gfg-title")) == null ? void 0 : _a3.textContent) || "").trim();
       const bodyEl = doc.querySelector(
         ".problems_problem_content__Xm_eO, .problem-statement-gfg, #problem-statement"
       );
@@ -6799,8 +6800,8 @@ ${code}`.toLowerCase();
       return true;
     }
     extract(doc = document) {
-      var _a2;
-      const title = (((_a2 = doc.querySelector("h1, h2, .problem-title, .question-title")) == null ? void 0 : _a2.textContent) || "").trim();
+      var _a3;
+      const title = (((_a3 = doc.querySelector("h1, h2, .problem-title, .question-title")) == null ? void 0 : _a3.textContent) || "").trim();
       const container = doc.querySelector(
         ".problem-description, .coding-question, .que.coderunner, .question_holder, main, article, body"
       );
@@ -6887,14 +6888,14 @@ ${code}`.toLowerCase();
       const formulas = [];
       const katexEls = container.querySelectorAll('.katex-mathml annotation, [data-latex], script[type="math/tex"]');
       Array.from(katexEls).forEach((el) => {
-        var _a2;
-        const tex = el.getAttribute("data-latex") || ((_a2 = el.textContent) == null ? void 0 : _a2.trim());
+        var _a3;
+        const tex = el.getAttribute("data-latex") || ((_a3 = el.textContent) == null ? void 0 : _a3.trim());
         if (tex && !formulas.includes(tex)) formulas.push(tex);
       });
       const mathEls = container.querySelectorAll("math");
       Array.from(mathEls).forEach((el) => {
-        var _a2;
-        const alt = el.getAttribute("alttext") || ((_a2 = el.textContent) == null ? void 0 : _a2.trim());
+        var _a3;
+        const alt = el.getAttribute("alttext") || ((_a3 = el.textContent) == null ? void 0 : _a3.trim());
         if (alt && !formulas.includes(alt)) formulas.push(alt);
       });
       return formulas.join("; ");
@@ -6974,7 +6975,7 @@ ${code}`.toLowerCase();
       return true;
     }
     extract(selectedText = "", anchorElement = null) {
-      var _a2;
+      var _a3;
       const raw = String(selectedText || "").trim();
       let question = raw;
       let options = [];
@@ -7007,7 +7008,7 @@ ${code}`.toLowerCase();
             "article",
             "li"
           ].join(", ")
-        ) || ((_a2 = anchorElement.parentElement) == null ? void 0 : _a2.parentElement);
+        ) || ((_a3 = anchorElement.parentElement) == null ? void 0 : _a3.parentElement);
         if (container) {
           mathFormula = this.extractMath(container);
           codeSnippet = this.extractCode(container);
@@ -7033,15 +7034,15 @@ ${code}`.toLowerCase();
       super("MoodleAdapter");
     }
     canHandle(element, doc = document) {
-      var _a2, _b, _c;
+      var _a3, _b2, _c2;
       if (!element && !doc) return false;
       return Boolean(
-        ((_a2 = element == null ? void 0 : element.closest) == null ? void 0 : _a2.call(element, ".que")) || ((_b = doc == null ? void 0 : doc.querySelector) == null ? void 0 : _b.call(doc, ".path-mod-quiz")) || ((_c = doc == null ? void 0 : doc.querySelector) == null ? void 0 : _c.call(doc, ".que.multichoice, .que.numerical, .que.shortanswer"))
+        ((_a3 = element == null ? void 0 : element.closest) == null ? void 0 : _a3.call(element, ".que")) || ((_b2 = doc == null ? void 0 : doc.querySelector) == null ? void 0 : _b2.call(doc, ".path-mod-quiz")) || ((_c2 = doc == null ? void 0 : doc.querySelector) == null ? void 0 : _c2.call(doc, ".que.multichoice, .que.numerical, .que.shortanswer"))
       );
     }
     extract(selectedText = "", anchorElement = null, doc = document) {
-      var _a2, _b;
-      const queContainer = ((_a2 = anchorElement == null ? void 0 : anchorElement.closest) == null ? void 0 : _a2.call(anchorElement, ".que")) || ((_b = doc == null ? void 0 : doc.querySelector) == null ? void 0 : _b.call(doc, ".que"));
+      var _a3, _b2;
+      const queContainer = ((_a3 = anchorElement == null ? void 0 : anchorElement.closest) == null ? void 0 : _a3.call(anchorElement, ".que")) || ((_b2 = doc == null ? void 0 : doc.querySelector) == null ? void 0 : _b2.call(doc, ".que"));
       if (!queContainer) return null;
       const qTextEl = queContainer.querySelector(".qtext, .formulation .qtext");
       const question = qTextEl ? getElText(qTextEl) : selectedText || "";
@@ -7075,15 +7076,15 @@ ${code}`.toLowerCase();
       super("CanvasAdapter");
     }
     canHandle(element, doc = document) {
-      var _a2, _b;
+      var _a3, _b2;
       if (!element && !doc) return false;
       return Boolean(
-        ((_a2 = element == null ? void 0 : element.closest) == null ? void 0 : _a2.call(element, ".question_holder, .display_question, #questions.quiz_sortable")) || ((_b = doc == null ? void 0 : doc.querySelector) == null ? void 0 : _b.call(doc, ".canvas-quiz, #quiz-instructions, .question_holder"))
+        ((_a3 = element == null ? void 0 : element.closest) == null ? void 0 : _a3.call(element, ".question_holder, .display_question, #questions.quiz_sortable")) || ((_b2 = doc == null ? void 0 : doc.querySelector) == null ? void 0 : _b2.call(doc, ".canvas-quiz, #quiz-instructions, .question_holder"))
       );
     }
     extract(selectedText = "", anchorElement = null, doc = document) {
-      var _a2, _b;
-      const qHolder = ((_a2 = anchorElement == null ? void 0 : anchorElement.closest) == null ? void 0 : _a2.call(anchorElement, ".question_holder, .display_question, .question")) || ((_b = doc == null ? void 0 : doc.querySelector) == null ? void 0 : _b.call(doc, ".question_holder"));
+      var _a3, _b2;
+      const qHolder = ((_a3 = anchorElement == null ? void 0 : anchorElement.closest) == null ? void 0 : _a3.call(anchorElement, ".question_holder, .display_question, .question")) || ((_b2 = doc == null ? void 0 : doc.querySelector) == null ? void 0 : _b2.call(doc, ".question_holder"));
       if (!qHolder) return null;
       const qTextEl = qHolder.querySelector(".question_text, .original_question_text");
       const question = qTextEl ? getElText(qTextEl) : selectedText || "";
@@ -7114,15 +7115,15 @@ ${code}`.toLowerCase();
       super("CustomPortalAdapter");
     }
     canHandle(element) {
-      var _a2;
+      var _a3;
       if (!element) return false;
       return Boolean(
-        (_a2 = element.closest) == null ? void 0 : _a2.call(element, '.takeQuestionDiv, [role="listitem"], .freebirdFormviewerViewNumberedItem, .assessment-item, .quiz-card')
+        (_a3 = element.closest) == null ? void 0 : _a3.call(element, '.takeQuestionDiv, [role="listitem"], .freebirdFormviewerViewNumberedItem, .assessment-item, .quiz-card')
       );
     }
     extract(selectedText = "", anchorElement = null) {
-      var _a2;
-      const container = (_a2 = anchorElement == null ? void 0 : anchorElement.closest) == null ? void 0 : _a2.call(
+      var _a3;
+      const container = (_a3 = anchorElement == null ? void 0 : anchorElement.closest) == null ? void 0 : _a3.call(
         anchorElement,
         [
           ".takeQuestionDiv",
@@ -7158,9 +7159,9 @@ ${code}`.toLowerCase();
       this.adapters = [new MoodleAdapter(), new CanvasAdapter(), new CustomPortalAdapter()];
     }
     extractFromSelection(selection) {
-      var _a2, _b;
+      var _a3, _b2;
       if (!selection) return null;
-      const selectedText = ((_a2 = selection.toString()) == null ? void 0 : _a2.trim()) || "";
+      const selectedText = ((_a3 = selection.toString()) == null ? void 0 : _a3.trim()) || "";
       if (selectedText.length < 3) return null;
       let anchorElement = null;
       if (selection.anchorNode) {
@@ -7174,7 +7175,7 @@ ${code}`.toLowerCase();
         if (adapter.canHandle(anchorElement)) {
           const platformResult = adapter.extract(selectedText, anchorElement);
           if (platformResult && platformResult.success) {
-            if ((genericResult == null ? void 0 : genericResult.question) && genericResult.question.length > (((_b = platformResult.question) == null ? void 0 : _b.length) || 0)) {
+            if ((genericResult == null ? void 0 : genericResult.question) && genericResult.question.length > (((_b2 = platformResult.question) == null ? void 0 : _b2.length) || 0)) {
               platformResult.question = genericResult.question;
             }
             return platformResult;
@@ -7212,69 +7213,163 @@ ${code}`.toLowerCase();
     "geeksforgeeks.org",
     "instructure.com"
   ];
-  chrome.runtime.onInstalled.addListener(async () => {
-    await chrome.storage.local.set({
-      apiBase: "http://localhost:8787",
-      autoAnswerOnCopy: false,
-      showFloatingButton: true,
-      enableAllSites: false,
-      allowedSites: DEFAULT_ALLOWED_SITES,
-      autoDetectOptions: true
-    });
-    const { localUserId } = await chrome.storage.local.get("localUserId");
-    if (!localUserId) {
-      await chrome.storage.local.set({ localUserId: crypto.randomUUID() });
-    }
-    chrome.contextMenus.create({
-      id: "examai-research-question",
-      title: "Research Question with ExamAI",
-      contexts: ["selection"]
-    });
-  });
-  chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-    if (info.menuItemId === "examai-research-question" && (tab == null ? void 0 : tab.id)) {
-      try {
-        const msg = validateExtensionMessage({
-          type: "RESEARCH_SELECTION",
-          text: info.selectionText || ""
-        });
-        await chrome.tabs.sendMessage(tab.id, msg);
-      } catch (err) {
-        console.warn("[ExamAI Service Worker] Could not send message to tab:", err);
+  const SETTINGS_SCHEMA_VERSION = 1;
+  const DEFAULT_SETTINGS = {
+    apiBase: "http://localhost:8787",
+    autoAnswerOnCopy: false,
+    showFloatingButton: true,
+    enableAllSites: false,
+    allowedSites: DEFAULT_ALLOWED_SITES,
+    autoDetectOptions: true,
+    settingsVersion: SETTINGS_SCHEMA_VERSION
+  };
+  const SETTINGS_MIGRATIONS = [
+    {
+      version: 1,
+      migrate: (settings) => {
+        return {
+          ...settings,
+          settingsVersion: 1
+        };
       }
     }
-  });
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    var _a2;
-    if ((message == null ? void 0 : message.type) === "OPEN_OPTIONS") {
-      chrome.runtime.openOptionsPage();
-      sendResponse({ ok: true });
-      return true;
+  ];
+  function runSettingsMigrations(settings, targetVersion = SETTINGS_SCHEMA_VERSION) {
+    let current = { ...settings };
+    const currentVersion = Number(current.settingsVersion || 0);
+    for (const m of SETTINGS_MIGRATIONS) {
+      if (m.version > currentVersion && m.version <= targetVersion) {
+        current = m.migrate(current);
+      }
     }
-    if ((message == null ? void 0 : message.type) === "CAPTURE_VISIBLE_TAB") {
-      const windowId = ((_a2 = sender.tab) == null ? void 0 : _a2.windowId) ?? chrome.windows.WINDOW_ID_CURRENT;
-      chrome.tabs.captureVisibleTab(windowId, { format: "png" }, (dataUrl) => {
-        var _a3;
-        if (chrome.runtime.lastError || !dataUrl) {
-          sendResponse({ ok: false, error: ((_a3 = chrome.runtime.lastError) == null ? void 0 : _a3.message) || "captureVisibleTab failed" });
-        } else {
-          sendResponse({ ok: true, dataUrl });
+    current.settingsVersion = targetVersion;
+    return current;
+  }
+  async function handleInstalled(details) {
+    const reason = (details == null ? void 0 : details.reason) || "install";
+    const existing = await chrome.storage.local.get(null);
+    if (reason === "install") {
+      const toWrite = {};
+      for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
+        if (existing[key] === void 0) {
+          toWrite[key] = value;
         }
-      });
-      return true;
+      }
+      if (!existing.localUserId) {
+        toWrite.localUserId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `usr_${Date.now()}`;
+      }
+      if (Object.keys(toWrite).length > 0) {
+        await chrome.storage.local.set(toWrite);
+      }
+    } else if (reason === "update") {
+      const migrated = runSettingsMigrations(existing, SETTINGS_SCHEMA_VERSION);
+      const toWrite = {};
+      for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
+        if (migrated[key] === void 0) {
+          toWrite[key] = value;
+        }
+      }
+      toWrite.settingsVersion = SETTINGS_SCHEMA_VERSION;
+      if (!migrated.localUserId && !existing.localUserId) {
+        toWrite.localUserId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `usr_${Date.now()}`;
+      }
+      if (Object.keys(toWrite).length > 0) {
+        await chrome.storage.local.set(toWrite);
+      }
     }
-    return false;
-  });
-  chrome.commands.onCommand.addListener((command) => {
-    if (command === "analyze_question") {
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        var _a2;
-        if ((_a2 = tabs[0]) == null ? void 0 : _a2.id) {
-          const msg = validateExtensionMessage({ type: "TRIGGER_EXAM_ASSIST" });
-          chrome.tabs.sendMessage(tabs[0].id, msg).catch(() => {
+    setupContextMenu();
+  }
+  function setupContextMenu() {
+    if (typeof chrome === "undefined" || !chrome.contextMenus) return;
+    const createMenu = () => {
+      try {
+        chrome.contextMenus.create(
+          {
+            id: "examai-research-question",
+            title: "Research Question with ExamAI",
+            contexts: ["selection"]
+          },
+          () => {
+            var _a3;
+            if ((_a3 = chrome.runtime) == null ? void 0 : _a3.lastError) {
+            }
+          }
+        );
+      } catch {
+      }
+    };
+    if (typeof chrome.contextMenus.removeAll === "function") {
+      chrome.contextMenus.removeAll(() => {
+        createMenu();
+      });
+    } else {
+      createMenu();
+    }
+  }
+  if (typeof chrome !== "undefined" && ((_a2 = chrome.runtime) == null ? void 0 : _a2.onInstalled)) {
+    chrome.runtime.onInstalled.addListener((details) => {
+      handleInstalled(details).catch((err) => {
+        console.warn("[ExamAI Service Worker] onInstalled error:", err);
+      });
+    });
+  }
+  if (typeof chrome !== "undefined" && ((_b = chrome.contextMenus) == null ? void 0 : _b.onClicked)) {
+    chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+      if (info.menuItemId === "examai-research-question" && (tab == null ? void 0 : tab.id)) {
+        try {
+          const msg = validateExtensionMessage({
+            type: "RESEARCH_SELECTION",
+            text: info.selectionText || ""
           });
+          await chrome.tabs.sendMessage(tab.id, msg);
+        } catch (err) {
+          console.warn("[ExamAI Service Worker] Could not send message to tab:", err);
         }
-      });
-    }
-  });
-})();
+      }
+    });
+  }
+  if (typeof chrome !== "undefined" && ((_c = chrome.runtime) == null ? void 0 : _c.onMessage)) {
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      var _a3;
+      if ((message == null ? void 0 : message.type) === "OPEN_OPTIONS") {
+        chrome.runtime.openOptionsPage();
+        sendResponse({ ok: true });
+        return true;
+      }
+      if ((message == null ? void 0 : message.type) === "CAPTURE_VISIBLE_TAB") {
+        const windowId = ((_a3 = sender.tab) == null ? void 0 : _a3.windowId) ?? chrome.windows.WINDOW_ID_CURRENT;
+        chrome.tabs.captureVisibleTab(windowId, { format: "png" }, (dataUrl) => {
+          var _a4;
+          if (chrome.runtime.lastError || !dataUrl) {
+            sendResponse({ ok: false, error: ((_a4 = chrome.runtime.lastError) == null ? void 0 : _a4.message) || "captureVisibleTab failed" });
+          } else {
+            sendResponse({ ok: true, dataUrl });
+          }
+        });
+        return true;
+      }
+      return false;
+    });
+  }
+  if (typeof chrome !== "undefined" && ((_d = chrome.commands) == null ? void 0 : _d.onCommand)) {
+    chrome.commands.onCommand.addListener((command) => {
+      if (command === "analyze_question") {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          var _a3;
+          if ((_a3 = tabs[0]) == null ? void 0 : _a3.id) {
+            const msg = validateExtensionMessage({ type: "TRIGGER_EXAM_ASSIST" });
+            chrome.tabs.sendMessage(tabs[0].id, msg).catch(() => {
+            });
+          }
+        });
+      }
+    });
+  }
+  exports.DEFAULT_SETTINGS = DEFAULT_SETTINGS;
+  exports.SETTINGS_MIGRATIONS = SETTINGS_MIGRATIONS;
+  exports.SETTINGS_SCHEMA_VERSION = SETTINGS_SCHEMA_VERSION;
+  exports.handleInstalled = handleInstalled;
+  exports.runSettingsMigrations = runSettingsMigrations;
+  Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
+  return exports;
+})({});

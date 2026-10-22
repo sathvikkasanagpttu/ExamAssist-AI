@@ -21,6 +21,12 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Install Monorepo Root dependencies
+        run: npm ci
+
+      - name: Version Consistency & Drift Check
+        run: npm run version:check
+
       - name: Install Server dependencies
         working-directory: server
         run: npm ci
@@ -38,6 +44,12 @@ jobs:
         run: |
           npm run typecheck
           npm run build
+
+      - name: Extension Distribution Verification
+        run: npm run verify:dist
+
+      - name: Extension Package Check
+        run: npm run pack:extension
 
       - name: Extension Adapter Fixture Tests (Vitest + jsdom)
         working-directory: extension

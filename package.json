@@ -1,6 +1,6 @@
 {
   "name": "examai-study-assistant-monorepo",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,6 +10,9 @@
     "test:e2e": "npm --prefix extension run test:e2e",
     "build": "npm --prefix extension run build",
     "pack": "npm --prefix server run pack",
+    "pack:extension": "node scripts/pack-extension.mjs",
+    "verify:dist": "node scripts/verify-dist.mjs",
+    "docs:verify": "node scripts/verify-docs.mjs",
     "version:check": "node scripts/sync-versions.mjs --check",
     "version:sync": "node scripts/sync-versions.mjs"
   }

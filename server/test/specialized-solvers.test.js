@@ -22,6 +22,16 @@ test("mathjs deterministically checks ten numeric cases", () => {
   for (const [expression, expected] of cases) assert.equal(safeMathEvaluate(expression), expected, expression);
 });
 
+test("calculator module resolves cleanly under Node ESM without ERR_MODULE_NOT_FOUND", async () => {
+  const { evaluateNumericalContext, safeMathEvaluate: safeEval } = await import("../pipeline/calculator.js");
+  assert.equal(typeof evaluateNumericalContext, "function");
+  assert.equal(typeof safeEval, "function");
+  assert.equal(safeEval("100 / 4"), 25);
+  const context = evaluateNumericalContext("What is the kinetic energy when m = 4.0 and v = 15?", "0.5 * 4.0 * 15^2");
+  assert.ok(context.calculations.length > 0);
+  assert.equal(context.calculations[0].result, 450);
+});
+
 test("math solver reports mismatch and trusts calculated result", async () => {
   const aiClient = { generateJson: async () => ({ operation: "evaluate", expression: "6 * 7", unit: "", decimalPlaces: null }) };
   const result = await runSpecializedSolver({ question: "Calculate 6 times 7", questionType: "NUMERICAL", aiClient,

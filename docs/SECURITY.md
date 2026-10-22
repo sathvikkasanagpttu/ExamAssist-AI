@@ -68,12 +68,15 @@ The optional native agent receives only visible question data. Its web, private-
 
 ### Restricted solver execution
 
-The assessment API never executes submitted code on its own host. Compose provides a separate sandbox container with a read-only root filesystem, memory/CPU/process limits, and an isolated internal network. Its small supervisor process runs as root with only `CHOWN`, `SETPCAP`, `SYS_ADMIN`, and `NET_ADMIN` so it can prepare an unprivileged workspace and Bubblewrap namespaces on Docker Desktop; the submitted program runs as UID 10002 with no capabilities, a read-only filesystem view, no network, and a per-run temporary directory. The helper is masked from submitted code after setup. The service enforces a short timeout and bounded output. SQL runs against a new in-memory SQLite database and accepts only a single read query. If the sandbox is missing or a tool fails, the response remains `UNVERIFIED` and does not claim execution.
+The assessment API never executes submitted code on its own host. Compose provides a separate sandbox container (`examassist-sandbox`) hardened with `security_opt: ["no-new-privileges:true", "seccomp=./server/sandbox/seccomp-profile.json"]`, a read-only root filesystem, memory/CPU/process limits, and an isolated internal network. Its small supervisor process runs as root with only `CHOWN`, `SETPCAP`, `SYS_ADMIN`, and `NET_ADMIN` so it can prepare an unprivileged workspace and Bubblewrap namespaces on Docker Desktop; the submitted program runs as UID 10002 with no capabilities, a read-only filesystem view, no network, and a per-run temporary directory. The helper is masked from submitted code after setup. The service enforces a short timeout and bounded output. SQL runs against a new in-memory SQLite database and accepts only a single read query. If the sandbox is missing or a tool fails, the response remains `UNVERIFIED` and does not claim execution.
 
-| Security Control | Implementation | Purpose |
-| :--- | :--- | :--- |
-| **Sliding Window Rate Limiter** | `server/rateLimiter.js` (120 req/min/IP) | Prevents denial-of-service and downstream API quota exhaustion. |
-| **Strict Schema Validation** | `zod` runtime schemas (`server/schemas.js`) | Rejects malformed payloads, injection attempts, and excessive lengths. |
-| **Strict Payload Caps** | `express.json({ limit: "64kb" })` | Blocks buffer overflow and resource exhaustion attacks. |
-| **CORS Filtering** | Origin whitelisting in `server/server.js` | Restricts browser-based cross-origin calls to authorized extension IDs. |
-| **Manifest V3 Content Security Policy** | `script-src 'self'` | Eliminates remote script evaluation and code injection in extension pages. |
+| Security Control | Implementation | Purpose | Proving Test / Artifact |
+| :--- | :--- | :--- | :--- |
+| **Sliding Window Rate Limiter** | `server/rateLimiter.js` (120 req/min/IP) | Prevents denial-of-service and downstream API quota exhaustion. | [`server/test/network-hardening.test.js`](../server/test/network-hardening.test.js) |
+| **Strict Schema Validation** | `zod` runtime schemas (`server/schemas.js`) | Rejects malformed payloads, injection attempts, and excessive lengths. | [`server/test/api-validation.test.js`](../server/test/api-validation.test.js) |
+| **Strict Payload Caps** | `express.json({ limit: "64kb" })` | Blocks buffer overflow and resource exhaustion attacks. | [`server/test/api-validation.test.js`](../server/test/api-validation.test.js) |
+| **CORS Filtering & Host Binding** | Explicit `ALLOWED_ORIGINS` in `server/server.js` | Restricts cross-origin calls and binds to 127.0.0.1 by default. | [`server/test/network-hardening.test.js`](../server/test/network-hardening.test.js) |
+| **Sandbox Syscall Seccomp Filtering** | `server/sandbox/seccomp-profile.json` in `docker-compose.yml` | Blocks dangerous syscalls (`ptrace`, `bpf`, `kexec_load`). | [`server/test/seccomp.test.js`](../server/test/seccomp.test.js) |
+| **Telemetry & Content Redaction** | `server/pipeline/observabilityAndSafety.js` | Redacts code and questions in OTLP and Langfuse spans. | [`server/test/otlp-langfuse-export.test.js`](../server/test/otlp-langfuse-export.test.js) |
+| **Extension Update Settings Safety** | `extension/src/service-worker.ts` | Preserves custom `apiBase` and user settings across extension updates. | [`extension/test/settings-migration.test.ts`](../extension/test/settings-migration.test.ts) |
+| **Manifest V3 Content Security Policy** | `script-src 'self'` in `extension/manifest.json` | Eliminates remote script evaluation and code injection in extension pages. | [`extension/e2e/load-extension.spec.ts`](../extension/e2e/load-extension.spec.ts) |

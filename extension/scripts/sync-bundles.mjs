@@ -66,11 +66,27 @@ if (fs.existsSync(manifestPath)) {
   }
 }
 
+// Copy icons directory to dist
+const iconsSrc = path.join(rootDir, "icons");
+const iconsDist = path.join(distDir, "icons");
+if (fs.existsSync(iconsSrc)) {
+  fs.cpSync(iconsSrc, iconsDist, { recursive: true });
+  console.log("[build] Copied icons to dist/icons");
+}
+
 for (const staticFile of ["manifest.json", "popup.html", "options.html", "sidepanel.html", "content.css"]) {
   const src = path.join(rootDir, staticFile);
   if (fs.existsSync(src)) {
     fs.copyFileSync(src, path.join(distDir, staticFile));
   }
+}
+
+// Ensure manifest in dist is formatted and valid
+const distManifestPath = path.join(distDir, "manifest.json");
+if (fs.existsSync(distManifestPath)) {
+  const distManifest = JSON.parse(fs.readFileSync(distManifestPath, "utf8"));
+  distManifest.version = extPkg.version;
+  fs.writeFileSync(distManifestPath, JSON.stringify(distManifest, null, 2) + "\n", "utf8");
 }
 
 console.log("[build] Built self-contained MV3 bundles for content, sidepanel, service-worker, popup, and options.");

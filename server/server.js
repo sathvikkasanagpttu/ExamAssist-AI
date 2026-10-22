@@ -72,30 +72,90 @@ initLangfuseTracing();
 
 const app = express();
 
+// Trust Proxy Configuration
+const trustProxyEnv = process.env.TRUST_PROXY;
+if (trustProxyEnv !== undefined) {
+  if (trustProxyEnv === "true") {
+    app.set("trust proxy", true);
+  } else if (trustProxyEnv === "false") {
+    app.set("trust proxy", false);
+  } else if (!Number.isNaN(Number(trustProxyEnv))) {
+    app.set("trust proxy", Number(trustProxyEnv));
+  } else {
+    app.set("trust proxy", trustProxyEnv);
+  }
+} else {
+  app.set("trust proxy", false);
+}
+
 // 1. CORS Configuration
-const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS
-  ? process.env.CORS_ALLOWED_ORIGINS.split(",").map(s => s.trim())
-  : ["*"];
+export function parseAllowedOrigins(env = process.env) {
+  const raw = env.ALLOWED_ORIGINS || env.CORS_ALLOWED_ORIGINS || "";
+  const list = raw
+    .split(",")
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  if (env.EXTENSION_ID) {
+    const extOrigin = `chrome-extension://${env.EXTENSION_ID}`;
+    if (!list.includes(extOrigin)) {
+      list.push(extOrigin);
+    }
+  }
+  return list;
+}
+
+export function isOriginAllowed(origin, env = process.env) {
+  if (!origin) {
+    return true;
+  }
+
+  const allowed = parseAllowedOrigins(env);
+
+  if (allowed.includes("*")) {
+    return true;
+  }
+
+  if (allowed.includes(origin)) {
+    return true;
+  }
+
+  // "null" origin is ONLY allowed if explicitly configured in ALLOWED_ORIGINS
+  if (origin === "null") {
+    return allowed.includes("null");
+  }
+
+  // In development, allow ONLY localhost and 127.0.0.1 origins
+  const isDev = env.NODE_ENV !== "production";
+  if (isDev) {
+    try {
+      const url = new URL(origin);
+      if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
+        return true;
+      }
+    } catch {}
+    return false;
+  }
+
+  return false;
+}
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests without Origin, "null" origin (file://), chrome-extension://, or when "*" / dev mode is active
-    const matchesAllowedOrigin =
-      !origin ||
-      origin === "null" ||
-      origin.startsWith("chrome-extension://") ||
-      allowedOrigins.includes("*") ||
-      allowedOrigins.includes(origin) ||
-      allowedOrigins.some((rule) => rule.endsWith("://*") && origin?.startsWith(rule.slice(0, -1))) ||
-      process.env.NODE_ENV !== "production";
-
-    if (matchesAllowedOrigin) {
+    if (isOriginAllowed(origin)) {
       callback(null, true);
     } else {
       callback(new Error("CORS origin not allowed by policy"));
     }
   }
 }));
+
+app.use((err, req, res, next) => {
+  if (err && typeof err.message === "string" && err.message.includes("CORS origin not allowed")) {
+    return res.status(403).json({ error: "Forbidden", message: err.message, code: "CORS_FORBIDDEN" });
+  }
+  next(err);
+});
 
 // 2. Request body parser with strict size limits (6MB only for /api/vision/extract; 64KB everywhere else)
 app.use("/api/vision/extract", express.json({ limit: "6mb" }));
@@ -104,11 +164,16 @@ app.use(express.json({ limit: "64kb" }));
 // 3. Rate limiting middleware
 app.use(createRateLimiter({
   windowMs: 60 * 1000,
-  maxRequests: 120
+  maxRequests: 120,
+  maxEntries: Number(process.env.RATE_LIMIT_MAX_ENTRIES || 10000)
 }));
 
 const port = Number(process.env.PORT || 8787);
-const host = process.env.HOST || "0.0.0.0";
+const defaultHost = "127.0.0.1";
+const host = process.env.HOST || defaultHost;
+if (host === "0.0.0.0") {
+  logger.warn("Server bound to 0.0.0.0. External access is enabled - ensure appropriate network firewalls are configured.");
+}
 const kbUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: Number(process.env.KB_MAX_UPLOAD_BYTES || 10 * 1024 * 1024), files: 1 } });
 const isTestRun =
   process.env.NODE_ENV === "test" ||

@@ -1,6 +1,0 @@
-{"timestamp":"2026-10-11T19:27:11.377Z","service":"ExamAssist-Backend","level":"INFO","message":"ExamAssist AI Server running on port 8787","port":8787}
-ExamAssist AI Server active on http://localhost:8787
-{"timestamp":"2026-10-11T19:30:38.190Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"CODING","subject":"Computer Science","difficulty":"Intermediate"}
-{"timestamp":"2026-10-11T19:30:43.486Z","service":"ExamAssist-Backend","level":"INFO","message":"Assessment processed","questionType":"CODING","confidence":"UNVERIFIED","sourcesCount":0,"latencyMs":5302}
-{"timestamp":"2026-10-11T19:33:21.005Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"CODING","subject":"Computer Science","difficulty":"Intermediate"}
-{"timestamp":"2026-10-11T19:33:24.379Z","service":"ExamAssist-Backend","level":"INFO","message":"Question classified","questionType":"CODING","subject":"Computer Science","difficulty":"Intermediate"}

@@ -1,11 +1,13 @@
 {
   "name": "examai-study-assistant-extension",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "private": true,
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "node scripts/sync-bundles.mjs",
+    "pack:extension": "node ../scripts/pack-extension.mjs",
+    "verify:dist": "node ../scripts/verify-dist.mjs",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "lint": "tsc --noEmit"

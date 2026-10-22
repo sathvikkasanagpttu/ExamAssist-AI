@@ -20,7 +20,7 @@ ExamAssist AI is engineered around strict ethical, security, and privacy boundar
 
 ## 2. Narrow Extension Permissions
 
-- `extension/manifest.json` ships with a narrow default allow-list (`localhost`, `127.0.0.1`) and **never** declares `<all_urls>` in `content_scripts` or `host_permissions`.
+- `extension/manifest.json` ships with a narrow default allow-list (`localhost`, `127.0.0.1`) and **never** declares `<all_urls>` in `content_scripts` or `host_permissions` (Verified by [`extension/e2e/load-extension.spec.ts`](../extension/e2e/load-extension.spec.ts) and [`scripts/verify-dist.mjs`](../scripts/verify-dist.mjs)).
 - Per-site access is requested at runtime from the popup (`#enable-site-btn`) via `chrome.permissions.request({ origins: [origin] })` using `optional_host_permissions`.
 
 ---
@@ -30,17 +30,17 @@ ExamAssist AI is engineered around strict ethical, security, and privacy boundar
 - **Internal-Only Container Networking**: `examassist-sandbox` in `docker-compose.yml` uses `expose: ["8790"]` on `networks: [backend]` (`internal: true`) and is **never** published to the host's ports.
 - **Per-Test Process Isolation**:
   - Runs inside `bubblewrap` (`bwrap`) with `--unshare-all`, `--ro-bind` rootfs, tmpfs `/tmp` (`noexec,nosuid,size=64m`), and unprivileged user `uid 10001` (`sandbox`).
-  - Enforces `pids_limit: 96`, `mem_limit: 768m`, `cpus: 1.0`, `no-new-privileges:true`, and `server/sandbox/seccomp-profile.json` blocking `socket`, `connect`, `bind`, `listen`, `accept`, `ptrace`, `mount`, `umount2`, `kexec_load`, `bpf`, and `perf_event_open`.
+  - Enforces `pids_limit: 96`, `mem_limit: 768m`, `cpus: 1.0`, `no-new-privileges:true`, and `server/sandbox/seccomp-profile.json` blocking dangerous kernel syscalls including `ptrace`, `bpf`, `kexec_load`, and `perf_event_open` (with network isolation enforced at the Bubblewrap boundary via `--unshare-net`) (Verified by [`server/test/seccomp.test.js`](../server/test/seccomp.test.js)).
   - Supports optional `gVisor` (`runsc`) runtime via `SANDBOX_RUNTIME=runsc`.
 - **BullMQ + Redis Job Queue (`server/pipeline/executionQueue.js`)**:
-  - Enforces per-user concurrency limits (`SANDBOX_USER_CONCURRENCY=2`), queue timeouts, and compile-once SHA-256 artifact caching for C, C++, and Java.
+  - Enforces per-user concurrency limits (`SANDBOX_USER_CONCURRENCY=2`), queue timeouts, and compile-once SHA-256 artifact caching for C, C++, and Java (Verified by [`server/test/phase2-coding-engine.test.js`](../server/test/phase2-coding-engine.test.js)).
 
 ---
 
 ## 4. Untrusted Input & Prompt-Injection Defense
 
 - Problem statements, web search snippets, OCR text, and sandbox outputs are wrapped and treated strictly as **untrusted data**, never instructions.
-- `server/pipeline/observabilityAndSafety.js` (`checkUntrustedDataInjection`) detects instruction-override patterns, and `scrubSecretsAndPII` strips API keys (`sk-...`, `AIza...`, Bearer tokens), emails, and phone numbers before logging or external calls.
+- `server/pipeline/observabilityAndSafety.js` (`checkUntrustedDataInjection`) detects instruction-override patterns, and `scrubSecretsAndPII` strips API keys (`sk-...`, `AIza...`, Bearer tokens), emails, and phone numbers before logging or external calls (Verified by [`server/test/phase5-observability-ci-eval.test.js`](../server/test/phase5-observability-ci-eval.test.js)).
 
 ---
 
@@ -48,7 +48,7 @@ ExamAssist AI is engineered around strict ethical, security, and privacy boundar
 
 - **Zero Screenshot Persistence (`server/pipeline/visionExtractor.js`)**:
   - Enforces a 4 MB limit, MIME whitelist (`image/png`, `image/jpeg`, `image/webp`), and binary magic-byte header verification.
-  - Processes images strictly in memory and returns `imagePersisted: false`; raw image bytes and base64 payloads are never written to disk or logs.
+  - Processes images strictly in memory and returns `imagePersisted: false`; raw image bytes and base64 payloads are never written to disk or logs (Verified by [`server/test/phase3-vision.test.js`](../server/test/phase3-vision.test.js)).
 - **OpenTelemetry & Langfuse Redaction (`server/pipeline/observabilityAndSafety.js`)**:
   - Code and question text are redacted by default (`OTEL_REDACT_CODE_AND_QUESTIONS=true`) into SHA-256 length digests (`[REDACTED_CONTENT len=... sha256=...]`).
-  - The local trace viewer (`GET /api/traces`) is restricted to localhost (`127.0.0.1` / `::1`) via `isLocalhostRequest`.
+  - The local trace viewer (`GET /api/traces`) is restricted to localhost (`127.0.0.1` / `::1`) via `isLocalhostRequest` (Verified by [`server/test/otlp-langfuse-export.test.js`](../server/test/otlp-langfuse-export.test.js) and [`server/test/phase5-observability-ci-eval.test.js`](../server/test/phase5-observability-ci-eval.test.js)).

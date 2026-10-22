@@ -3,12 +3,13 @@
  * ExamAssist AI - Monorepo Version Synchronization & Verification Script
  *
  * Usage:
- *   node scripts/sync-versions.mjs --check       # Verifies all package/manifest versions match
- *   node scripts/sync-versions.mjs [version]     # Syncs all packages/manifests to target version
+ *   node scripts/sync-versions.mjs --check       # Verifies all package, lockfile, and manifest versions match
+ *   node scripts/sync-versions.mjs [version]     # Syncs all packages/manifests/lockfiles to target version
  */
 
 import fs from "node:fs";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -16,8 +17,11 @@ const repoRoot = path.resolve(__dirname, "..");
 
 const FILES = {
   rootPackage: path.join(repoRoot, "package.json"),
+  rootPackageLock: path.join(repoRoot, "package-lock.json"),
   serverPackage: path.join(repoRoot, "server", "package.json"),
+  serverPackageLock: path.join(repoRoot, "server", "package-lock.json"),
   extensionPackage: path.join(repoRoot, "extension", "package.json"),
+  extensionPackageLock: path.join(repoRoot, "extension", "package-lock.json"),
   extensionManifest: path.join(repoRoot, "extension", "manifest.json"),
   sharedPackage: path.join(repoRoot, "shared", "package.json"),
   serverSchemas: path.join(repoRoot, "server", "schemas.js"),
@@ -30,11 +34,32 @@ export function getVersionMap() {
   if (fs.existsSync(FILES.rootPackage)) {
     versions.root = JSON.parse(fs.readFileSync(FILES.rootPackage, "utf8")).version;
   }
+  if (fs.existsSync(FILES.rootPackageLock)) {
+    const lock = JSON.parse(fs.readFileSync(FILES.rootPackageLock, "utf8"));
+    versions.rootLock = lock.version;
+    if (lock.packages && lock.packages[""]) {
+      versions.rootLockPackage = lock.packages[""].version;
+    }
+  }
   if (fs.existsSync(FILES.serverPackage)) {
     versions.server = JSON.parse(fs.readFileSync(FILES.serverPackage, "utf8")).version;
   }
+  if (fs.existsSync(FILES.serverPackageLock)) {
+    const lock = JSON.parse(fs.readFileSync(FILES.serverPackageLock, "utf8"));
+    versions.serverLock = lock.version;
+    if (lock.packages && lock.packages[""]) {
+      versions.serverLockPackage = lock.packages[""].version;
+    }
+  }
   if (fs.existsSync(FILES.extensionPackage)) {
     versions.extension = JSON.parse(fs.readFileSync(FILES.extensionPackage, "utf8")).version;
+  }
+  if (fs.existsSync(FILES.extensionPackageLock)) {
+    const lock = JSON.parse(fs.readFileSync(FILES.extensionPackageLock, "utf8"));
+    versions.extensionLock = lock.version;
+    if (lock.packages && lock.packages[""]) {
+      versions.extensionLockPackage = lock.packages[""].version;
+    }
   }
   if (fs.existsSync(FILES.extensionManifest)) {
     versions.manifest = JSON.parse(fs.readFileSync(FILES.extensionManifest, "utf8")).version;
@@ -123,6 +148,15 @@ export function syncVersions(targetVersion) {
     const distManifest = JSON.parse(fs.readFileSync(FILES.extensionDistManifest, "utf8"));
     distManifest.version = targetVersion;
     fs.writeFileSync(FILES.extensionDistManifest, JSON.stringify(distManifest, null, 2) + "\n", "utf8");
+  }
+
+  // 8. Update lockfiles using npm install --package-lock-only
+  try {
+    execFileSync("npm", ["install", "--package-lock-only"], { cwd: repoRoot, stdio: "ignore" });
+    execFileSync("npm", ["install", "--package-lock-only"], { cwd: path.join(repoRoot, "server"), stdio: "ignore" });
+    execFileSync("npm", ["install", "--package-lock-only"], { cwd: path.join(repoRoot, "extension"), stdio: "ignore" });
+  } catch (err) {
+    console.warn("[version:sync] Warning: Could not automatically update package-lock files:", err.message);
   }
 
   return targetVersion;

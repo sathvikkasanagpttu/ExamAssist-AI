@@ -1,6 +1,6 @@
 {
   "name": "examai-study-assistant-server",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -43,5 +43,8 @@
     "tree-sitter-wasms": "^0.1.13",
     "web-tree-sitter": "^0.20.8",
     "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "pngjs": "^7.0.0"
   }
 }

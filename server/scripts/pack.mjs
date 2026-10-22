@@ -7,7 +7,7 @@
  */
 
 import { execFileSync } from "child_process";
-import { existsSync, readFileSync, rmSync } from "fs";
+import { existsSync, readFileSync, rmSync, readdirSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -66,9 +66,31 @@ export function verifyVersionConsistency(rootDir = repoRoot) {
   return true;
 }
 
+export function verifyNoLogFiles(rootDir = repoRoot) {
+  const foundLogs = [];
+  function scan(dir) {
+    const entries = readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name === "node_modules" || entry.name === ".git" || entry.name === "eval" || entry.name === "test-results" || entry.name === "playwright-report") continue;
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        scan(fullPath);
+      } else if (entry.name.endsWith(".log")) {
+        foundLogs.push(path.relative(rootDir, fullPath));
+      }
+    }
+  }
+  scan(rootDir);
+  if (foundLogs.length > 0) {
+    throw new Error(`Pack rejected: log files found in repository:\n${foundLogs.map(l => `  - ${l}`).join("\n")}\nRemove log files before packaging.`);
+  }
+  return true;
+}
+
 export function buildAndAuditCleanZip(targetZip = zipPath, rootDir = repoRoot) {
   verifyIgnoreFiles(rootDir);
   verifyVersionConsistency(rootDir);
+  verifyNoLogFiles(rootDir);
 
   if (existsSync(targetZip)) {
     rmSync(targetZip, { force: true });
@@ -129,7 +151,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (dryCheckOnly) {
     verifyIgnoreFiles(repoRoot);
     verifyVersionConsistency(repoRoot);
-    console.log("[pack] .gitignore, .dockerignore, and version consistency checks passed.");
+    verifyNoLogFiles(repoRoot);
+    console.log("[pack] .gitignore, .dockerignore, log check, and version consistency checks passed.");
   } else {
     const result = buildAndAuditCleanZip(zipPath, repoRoot);
     console.log(`[pack] Built clean archive: ${result.zipPath} (${result.fileCount} files verified clean).`);

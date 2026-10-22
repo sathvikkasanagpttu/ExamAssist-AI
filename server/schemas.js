@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 
-export const APP_VERSION = "2.3.0";
+export const APP_VERSION = "2.3.1";
 
 export const QuestionTypeEnum = z.enum([
   "MCQ",

@@ -12,6 +12,7 @@ declare module "node:fs" {
   const fs: {
     existsSync: (p: string) => boolean;
     readFileSync: (p: string, enc: string) => string;
+    rmSync: (p: string, options?: unknown) => void;
   };
   export default fs;
 }

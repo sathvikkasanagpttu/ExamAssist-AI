@@ -8852,6 +8852,9 @@ ${code}`.toLowerCase();
     if (typeof window === "undefined") return;
     if (window.__EXAMASSIST_CONTENT_LOADED__) return;
     window.__EXAMASSIST_CONTENT_LOADED__ = true;
+    if (typeof document !== "undefined" && document.documentElement) {
+      document.documentElement.setAttribute("data-examassist-loaded", "true");
+    }
     const extractionManager = new ExtractionManager();
     window.__EXAMASSIST_TEST_API__ = {
       extractCodingProblem,
