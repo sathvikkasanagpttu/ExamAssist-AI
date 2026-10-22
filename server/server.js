@@ -1,4 +1,5 @@
 import "dotenv/config";
+import http from "node:http";
 import express from "express";
 import cors from "cors";
 import {
@@ -105,6 +106,31 @@ export function parseAllowedOrigins(env = process.env) {
   return list;
 }
 
+export function matchesOriginRule(rule, origin) {
+  if (!rule || !origin) return false;
+  if (rule === "*" || rule === origin) return true;
+
+  if (rule === "chrome-extension://*") {
+    return origin.startsWith("chrome-extension://");
+  }
+
+  if (rule.includes("*")) {
+    const baseDomain = rule.replace(/\*\./g, "");
+    if (origin === baseDomain) {
+      return true;
+    }
+    const escaped = rule
+      .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+      .replace(/\*/g, "[^/]+");
+    const regex = new RegExp(`^${escaped}$`, "i");
+    if (regex.test(origin)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export function isOriginAllowed(origin, env = process.env) {
   if (!origin) {
     return true;
@@ -112,17 +138,15 @@ export function isOriginAllowed(origin, env = process.env) {
 
   const allowed = parseAllowedOrigins(env);
 
-  if (allowed.includes("*")) {
-    return true;
-  }
-
-  if (allowed.includes(origin)) {
-    return true;
-  }
-
   // "null" origin is ONLY allowed if explicitly configured in ALLOWED_ORIGINS
   if (origin === "null") {
     return allowed.includes("null");
+  }
+
+  for (const rule of allowed) {
+    if (matchesOriginRule(rule, origin)) {
+      return true;
+    }
   }
 
   // In development, allow ONLY localhost and 127.0.0.1 origins
@@ -147,7 +171,17 @@ app.use(cors({
     } else {
       callback(new Error("CORS origin not allowed by policy"));
     }
-  }
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Local-User-Id",
+    "Accept",
+    "Origin",
+    "X-Requested-With"
+  ]
 }));
 
 app.use((err, req, res, next) => {
@@ -1075,17 +1109,38 @@ app.get("/api/traces", (req, res) => {
 });
 
 // Start Server (skip when running under node --test or NODE_ENV=test)
+let primaryServer = null;
+let ipv6Server = null;
+
 if (!isTestRun) {
-  app.listen(port, host, () => {
-    logger.info(`ExamAssist AI Server running on port ${port}`, { port });
-    console.log(`ExamAssist AI Server active on http://localhost:${port}`);
+  primaryServer = app.listen(port, host, () => {
+    logger.info(`ExamAssist AI Server running on port ${port}`, { port, host });
+    console.log(`ExamAssist AI Server active on http://localhost:${port} (${host})`);
   });
+
+  // When binding to 127.0.0.1 or localhost, also bind to IPv6 loopback (::1) if available
+  if (host === "127.0.0.1" || host === "localhost") {
+    try {
+      ipv6Server = http.createServer(app);
+      ipv6Server.on("error", (err) => {
+        // EADDRINUSE or EAFNOSUPPORT if IPv6 is already bound or not supported
+        logger.debug(`IPv6 loopback listener notice: ${err.message}`);
+      });
+      ipv6Server.listen(port, "::1", () => {
+        logger.info(`ExamAssist AI Server also bound to IPv6 loopback [::1]:${port}`);
+      });
+    } catch (err) {
+      logger.debug(`IPv6 loopback bind skipped: ${err.message}`);
+    }
+  }
 }
 
 // Graceful flush on process termination
 if (!isTestRun) {
   const onShutdown = async () => {
     try {
+      if (primaryServer?.close) primaryServer.close();
+      if (ipv6Server?.close) ipv6Server.close();
       await flushLangfuse();
     } catch {}
     process.exit(0);

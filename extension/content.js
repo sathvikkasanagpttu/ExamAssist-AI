@@ -8194,6 +8194,7 @@ ${code}`.toLowerCase();
       }
     }, [props.autoRunToken, props.initialCaptured]);
     async function runAnalyze(qOverride, optsOverride, codeOverride) {
+      var _a3;
       const rawInput = (qOverride !== void 0 ? qOverride : questionText).trim();
       const parsedInline = parseQuestionAndOptions(rawInput);
       const manualOpts = optsOverride !== void 0 ? optsOverride : optionsText.split(/\r?\n/).map((l2) => l2.trim()).filter(Boolean);
@@ -8243,6 +8244,12 @@ ${code}`.toLowerCase();
         const e2 = err;
         if (e2.name === "AbortError") {
           setErrorState({ code: "CANCELLED", message: "Analysis cancelled by user. No answer was generated." });
+        } else if ((_a3 = e2.message) == null ? void 0 : _a3.toLowerCase().includes("failed to fetch")) {
+          const apiBase = await getApiBaseUrl().catch(() => "http://localhost:8787");
+          setErrorState({
+            code: "CONNECTION_FAILED",
+            message: `Cannot connect to ExamAssist backend at ${apiBase}. Ensure 'npm start' is running in the server directory.`
+          });
         } else {
           setErrorState({ code: e2.code || "ERROR", message: e2.message || "Request failed." });
         }
@@ -8713,7 +8720,7 @@ ${code}`.toLowerCase();
             streamStage
           ] }) }),
           errorState && /* @__PURE__ */ u$1("div", { id: "examai-error-banner", className: "examai-error", "data-error-code": errorState.code, children: [
-            /* @__PURE__ */ u$1("strong", { style: { display: "block", marginBottom: "4px" }, children: errorState.code === "CANCELLED" ? "Analysis Cancelled" : errorState.code === "AI_NOT_CONFIGURED" ? "⚠️ AI Key Not Configured" : "Assessment Error" }),
+            /* @__PURE__ */ u$1("strong", { style: { display: "block", marginBottom: "4px" }, children: errorState.code === "CANCELLED" ? "Analysis Cancelled" : errorState.code === "AI_NOT_CONFIGURED" ? "⚠️ AI Key Not Configured" : errorState.code === "CONNECTION_FAILED" ? "⚠️ Backend Offline" : "Assessment Error" }),
             /* @__PURE__ */ u$1("span", { children: errorState.message })
           ] }),
           result && /* @__PURE__ */ u$1("div", { id: "examai-result-card", className: "examai-card", children: [

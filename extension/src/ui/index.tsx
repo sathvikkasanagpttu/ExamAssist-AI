@@ -180,6 +180,12 @@ function InPageOverlayApp(props: OverlayProps) {
       const e = err as Error & { code?: string };
       if (e.name === "AbortError") {
         setErrorState({ code: "CANCELLED", message: "Analysis cancelled by user. No answer was generated." });
+      } else if (e.message?.toLowerCase().includes("failed to fetch")) {
+        const apiBase = await getApiBaseUrl().catch(() => "http://localhost:8787");
+        setErrorState({
+          code: "CONNECTION_FAILED",
+          message: `Cannot connect to ExamAssist backend at ${apiBase}. Ensure 'npm start' is running in the server directory.`
+        });
       } else {
         setErrorState({ code: e.code || "ERROR", message: e.message || "Request failed." });
       }
@@ -650,6 +656,8 @@ function InPageOverlayApp(props: OverlayProps) {
                     ? "Analysis Cancelled"
                     : errorState.code === "AI_NOT_CONFIGURED"
                     ? "⚠️ AI Key Not Configured"
+                    : errorState.code === "CONNECTION_FAILED"
+                    ? "⚠️ Backend Offline"
                     : "Assessment Error"}
                 </strong>
                 <span>{errorState.message}</span>

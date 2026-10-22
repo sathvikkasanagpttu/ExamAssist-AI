@@ -1,7 +1,7 @@
 import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { isOriginAllowed, parseAllowedOrigins } from "../server.js";
+import { isOriginAllowed, parseAllowedOrigins, matchesOriginRule } from "../server.js";
 import {
   LRUMap,
   MemoryRateLimitStore,
@@ -80,6 +80,28 @@ test("CORS: rejects blanket chrome-extension:// when not explicitly allowed", ()
     NODE_ENV: "production"
   };
   assert.equal(isOriginAllowed("chrome-extension://randomextensionid", env), false);
+});
+
+test("CORS: matches chrome-extension://* wildcard when configured", () => {
+  const env = {
+    ALLOWED_ORIGINS: "http://localhost:8787,chrome-extension://*",
+    NODE_ENV: "production"
+  };
+  assert.equal(isOriginAllowed("chrome-extension://abcdefghijklmnop", env), true);
+  assert.equal(isOriginAllowed("chrome-extension://anotherid12345678", env), true);
+  assert.equal(isOriginAllowed("https://evil.com", env), false);
+});
+
+test("CORS: matches domain and subdomain wildcards (e.g. https://*.leetcode.com)", () => {
+  const env = {
+    ALLOWED_ORIGINS: "https://*.leetcode.com, https://*.hackerrank.com",
+    NODE_ENV: "production"
+  };
+  assert.equal(isOriginAllowed("https://leetcode.com", env), true);
+  assert.equal(isOriginAllowed("https://discuss.leetcode.com", env), true);
+  assert.equal(isOriginAllowed("https://www.hackerrank.com", env), true);
+  assert.equal(isOriginAllowed("https://attacker-leetcode.com", env), false);
+  assert.equal(isOriginAllowed("https://otherdomain.com", env), false);
 });
 
 test("CORS: rejects 'null' origin unless explicitly listed in ALLOWED_ORIGINS", () => {
