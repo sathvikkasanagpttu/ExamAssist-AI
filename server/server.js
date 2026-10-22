@@ -514,6 +514,12 @@ app.post("/api/assessment/analyze", async (req, res) => {
  * exposing only user-visible pipeline progress through server-sent events.
  */
 app.post("/api/assessment/analyze/stream", async (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  if (typeof res.flushHeaders === "function") {
+    res.flushHeaders();
+  }
   let cancelled = false;
   const send = (event, data = {}) => {
     if (!cancelled && !res.writableEnded) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
