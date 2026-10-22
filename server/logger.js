@@ -30,6 +30,12 @@ export class PrivacyLogger {
     });
   }
 
+  debug(message, metadata = {}) {
+    if (process.env.DEBUG || process.env.NODE_ENV === "development") {
+      console.debug(this._format("DEBUG", message, metadata));
+    }
+  }
+
   info(message, metadata = {}) {
     console.log(this._format("INFO", message, metadata));
   }

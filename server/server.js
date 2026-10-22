@@ -1126,19 +1126,30 @@ if (!isTestRun) {
     console.log(`ExamAssist AI Server active on http://localhost:${port} (${host})`);
   });
 
+  primaryServer.on("error", (err) => {
+    if (err.code === "EADDRINUSE") {
+      logger.error(`Port ${port} is already in use by another process. Please terminate it before starting the server.`);
+      process.exit(1);
+    } else {
+      logger.error(`Server error: ${err.message}`);
+    }
+  });
+
   // When binding to 127.0.0.1 or localhost, also bind to IPv6 loopback (::1) if available
   if (host === "127.0.0.1" || host === "localhost") {
     try {
       ipv6Server = http.createServer(app);
       ipv6Server.on("error", (err) => {
         // EADDRINUSE or EAFNOSUPPORT if IPv6 is already bound or not supported
-        logger.debug(`IPv6 loopback listener notice: ${err.message}`);
+        if (err.code !== "EADDRINUSE") {
+          logger.warn(`IPv6 loopback listener notice: ${err.message}`);
+        }
       });
       ipv6Server.listen(port, "::1", () => {
         logger.info(`ExamAssist AI Server also bound to IPv6 loopback [::1]:${port}`);
       });
     } catch (err) {
-      logger.debug(`IPv6 loopback bind skipped: ${err.message}`);
+      // Safe fallback if IPv6 cannot be initialized
     }
   }
 }
