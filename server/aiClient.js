@@ -118,7 +118,11 @@ export class AIClient {
 
   get isConfigured() {
     return Boolean(
-      (this.apiKey && this.apiKey !== "replace_me" && this.apiKey.trim().length > 0) ||
+      (this.apiKey &&
+       this.apiKey !== "replace_me" &&
+       this.apiKey !== "your_openai_api_key_here" &&
+       !this.apiKey.startsWith("your_") &&
+       this.apiKey.trim().length > 0) ||
       this.mockHandler || this.toolLoopHandler
     );
   }
