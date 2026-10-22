@@ -3,7 +3,7 @@ var ExamAssist_service_worker = (function(exports) {
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 
-  var _a2, _b, _c, _d;
+  var _a2, _b, _c, _d, _e;
   function getEnumValues(entries) {
     const numericValues = Object.values(entries).filter((v) => typeof v === "number");
     const values = Object.entries(entries).filter(([k, _]) => numericValues.indexOf(+k) === -1).map(([_, v]) => v);
@@ -364,7 +364,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
     }
   }
   function finalizeIssue(iss, ctx, config2) {
-    var _a4, _b2, _c2, _d2, _e, _f, _g, _h, _i, _j;
+    var _a4, _b2, _c2, _d2, _e2, _f, _g, _h, _i, _j;
     var _a3;
     const traits = (_b2 = (_a4 = iss.inst) == null ? void 0 : _a4._zod) == null ? void 0 : _b2.traits;
     if (traits == null ? void 0 : traits.has("$ZodType")) {
@@ -374,7 +374,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
         iss.schema = iss.inst;
     }
     const schemaError = iss.schema !== iss.inst ? (_d2 = (_c2 = iss.schema) == null ? void 0 : _c2._zod.def) == null ? void 0 : _d2.error : void 0;
-    const message = iss.message ? iss.message : unwrapMessage((_g = (_f = (_e = iss.inst) == null ? void 0 : _e._zod.def) == null ? void 0 : _f.error) == null ? void 0 : _g.call(_f, iss)) ?? unwrapMessage(schemaError == null ? void 0 : schemaError(iss)) ?? unwrapMessage((_h = ctx == null ? void 0 : ctx.error) == null ? void 0 : _h.call(ctx, iss)) ?? unwrapMessage((_i = config2.customError) == null ? void 0 : _i.call(config2, iss)) ?? unwrapMessage((_j = config2.localeError) == null ? void 0 : _j.call(config2, iss)) ?? "Invalid input";
+    const message = iss.message ? iss.message : unwrapMessage((_g = (_f = (_e2 = iss.inst) == null ? void 0 : _e2._zod.def) == null ? void 0 : _f.error) == null ? void 0 : _g.call(_f, iss)) ?? unwrapMessage(schemaError == null ? void 0 : schemaError(iss)) ?? unwrapMessage((_h = ctx == null ? void 0 : ctx.error) == null ? void 0 : _h.call(ctx, iss)) ?? unwrapMessage((_i = config2.customError) == null ? void 0 : _i.call(config2, iss)) ?? unwrapMessage((_j = config2.localeError) == null ? void 0 : _j.call(config2, iss)) ?? "Invalid input";
     const full = {};
     for (const k of Object.keys(iss)) {
       if (k === "inst" || k === "schema" || k === "continue" || k === "input" || k === "__proto__")
@@ -7351,7 +7351,101 @@ ${code}`.toLowerCase();
       return false;
     });
   }
-  if (typeof chrome !== "undefined" && ((_d = chrome.commands) == null ? void 0 : _d.onCommand)) {
+  if (typeof chrome !== "undefined" && ((_d = chrome.runtime) == null ? void 0 : _d.onConnect)) {
+    chrome.runtime.onConnect.addListener((port) => {
+      if (port.name === "examai-stream-assessment") {
+        let abortController = new AbortController();
+        port.onDisconnect.addListener(() => {
+          abortController == null ? void 0 : abortController.abort();
+          abortController = null;
+        });
+        port.onMessage.addListener(async (msg) => {
+          var _a3, _b2;
+          if ((msg == null ? void 0 : msg.type) === "START_STREAM" && msg.request) {
+            try {
+              const apiBase = (msg.apiBase || "http://localhost:8787").replace(/\/+$/, "");
+              const res = await fetch(`${apiBase}/api/assessment/analyze/stream`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-Local-User-Id": msg.localUserId || ""
+                },
+                signal: abortController == null ? void 0 : abortController.signal,
+                body: JSON.stringify(msg.request)
+              });
+              if (!res.ok) {
+                let errPayload = {};
+                try {
+                  errPayload = await res.json();
+                } catch {
+                }
+                port.postMessage({
+                  type: "ERROR",
+                  error: {
+                    message: String(errPayload.error || `Streaming request failed (${res.status})`),
+                    code: typeof errPayload.code === "string" ? errPayload.code : void 0
+                  }
+                });
+                return;
+              }
+              const reader = (_a3 = res.body) == null ? void 0 : _a3.getReader();
+              if (!reader) {
+                port.postMessage({
+                  type: "ERROR",
+                  error: { message: "Streaming response body is unavailable." }
+                });
+                return;
+              }
+              const decoder = new TextDecoder();
+              let buffer = "";
+              let finalResult = null;
+              while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                const events = buffer.split("\n\n");
+                buffer = events.pop() || "";
+                for (const rawEvent of events) {
+                  const lines = rawEvent.split(/\r?\n/);
+                  const eventType = (_b2 = lines.find((line) => line.startsWith("event:"))) == null ? void 0 : _b2.slice(6).trim();
+                  const dataLine = lines.filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim()).join("\n");
+                  if (!dataLine) continue;
+                  try {
+                    const payload = JSON.parse(dataLine);
+                    port.postMessage({
+                      type: "EVENT",
+                      eventType,
+                      payload
+                    });
+                    if (eventType === "done") {
+                      finalResult = payload.response && typeof payload.response === "object" ? payload.response : payload;
+                    }
+                  } catch {
+                  }
+                }
+              }
+              port.postMessage({
+                type: "COMPLETE",
+                result: finalResult
+              });
+            } catch (err) {
+              const e = err;
+              if (e.name !== "AbortError") {
+                port.postMessage({
+                  type: "ERROR",
+                  error: {
+                    message: e.message || "Request failed",
+                    code: e.code
+                  }
+                });
+              }
+            }
+          }
+        });
+      }
+    });
+  }
+  if (typeof chrome !== "undefined" && ((_e = chrome.commands) == null ? void 0 : _e.onCommand)) {
     chrome.commands.onCommand.addListener((command) => {
       if (command === "analyze_question") {
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {

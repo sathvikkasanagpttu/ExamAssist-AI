@@ -180,6 +180,121 @@ if (typeof chrome !== "undefined" && chrome.runtime?.onMessage) {
   });
 }
 
+if (typeof chrome !== "undefined" && chrome.runtime?.onConnect) {
+  chrome.runtime.onConnect.addListener((port) => {
+    if (port.name === "examai-stream-assessment") {
+      let abortController: AbortController | null = new AbortController();
+
+      port.onDisconnect.addListener(() => {
+        abortController?.abort();
+        abortController = null;
+      });
+
+      port.onMessage.addListener(async (msg: {
+        type?: string;
+        request?: unknown;
+        apiBase?: string;
+        localUserId?: string;
+      }) => {
+        if (msg?.type === "START_STREAM" && msg.request) {
+          try {
+            const apiBase = (msg.apiBase || "http://localhost:8787").replace(/\/+$/, "");
+            const res = await fetch(`${apiBase}/api/assessment/analyze/stream`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-Local-User-Id": msg.localUserId || ""
+              },
+              signal: abortController?.signal,
+              body: JSON.stringify(msg.request)
+            });
+
+            if (!res.ok) {
+              let errPayload: Record<string, unknown> = {};
+              try {
+                errPayload = (await res.json()) as Record<string, unknown>;
+              } catch {}
+              port.postMessage({
+                type: "ERROR",
+                error: {
+                  message: String(errPayload.error || `Streaming request failed (${res.status})`),
+                  code: typeof errPayload.code === "string" ? errPayload.code : undefined
+                }
+              });
+              return;
+            }
+
+            const reader = res.body?.getReader();
+            if (!reader) {
+              port.postMessage({
+                type: "ERROR",
+                error: { message: "Streaming response body is unavailable." }
+              });
+              return;
+            }
+
+            const decoder = new TextDecoder();
+            let buffer = "";
+            let finalResult: Record<string, unknown> | null = null;
+
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              const events = buffer.split("\n\n");
+              buffer = events.pop() || "";
+
+              for (const rawEvent of events) {
+                const lines = rawEvent.split(/\r?\n/);
+                const eventType = lines
+                  .find((line) => line.startsWith("event:"))
+                  ?.slice(6)
+                  .trim();
+                const dataLine = lines
+                  .filter((line) => line.startsWith("data:"))
+                  .map((line) => line.slice(5).trim())
+                  .join("\n");
+                if (!dataLine) continue;
+
+                try {
+                  const payload = JSON.parse(dataLine) as Record<string, unknown>;
+                  port.postMessage({
+                    type: "EVENT",
+                    eventType,
+                    payload
+                  });
+                  if (eventType === "done") {
+                    finalResult =
+                      payload.response && typeof payload.response === "object"
+                        ? (payload.response as Record<string, unknown>)
+                        : payload;
+                  }
+                } catch {}
+              }
+            }
+
+            port.postMessage({
+              type: "COMPLETE",
+              result: finalResult
+            });
+          } catch (err) {
+            const e = err as Error & { code?: string };
+            if (e.name !== "AbortError") {
+              port.postMessage({
+                type: "ERROR",
+                error: {
+                  message: e.message || "Request failed",
+                  code: e.code
+                }
+              });
+            }
+          }
+        }
+      });
+    }
+  });
+}
+
 if (typeof chrome !== "undefined" && chrome.commands?.onCommand) {
   chrome.commands.onCommand.addListener((command) => {
     if (command === "analyze_question") {

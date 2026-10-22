@@ -173,7 +173,7 @@ export async function readAssessmentStreamResponse(
   return finalResult;
 }
 
-export async function streamAssessmentAnalysis({
+async function directStreamAssessmentAnalysis({
   request,
   apiBase,
   localUserId,
@@ -212,6 +212,169 @@ export async function streamAssessmentAnalysis({
   }
 
   return readAssessmentStreamResponse(res, onProgress);
+}
+
+async function streamViaServiceWorker({
+  request,
+  apiBase,
+  localUserId,
+  signal,
+  onProgress
+}: {
+  request: AssessmentAnalyzeRequest;
+  apiBase: string;
+  localUserId: string;
+  signal?: AbortSignal;
+  onProgress?: (update: StreamProgressUpdate) => void;
+}): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    let port: chrome.runtime.Port | null = null;
+    let finished = false;
+
+    const cleanup = () => {
+      finished = true;
+      if (signal) {
+        signal.removeEventListener("abort", onAbort);
+      }
+      if (port) {
+        try {
+          port.disconnect();
+        } catch {}
+        port = null;
+      }
+    };
+
+    const onAbort = () => {
+      cleanup();
+      reject(new DOMException("The user aborted a request.", "AbortError"));
+    };
+
+    if (signal?.aborted) {
+      return onAbort();
+    }
+    if (signal) {
+      signal.addEventListener("abort", onAbort);
+    }
+
+    try {
+      port = chrome.runtime.connect({ name: "examai-stream-assessment" });
+    } catch (err) {
+      cleanup();
+      return reject(err);
+    }
+
+    port.onDisconnect.addListener(() => {
+      if (!finished) {
+        cleanup();
+        reject(new Error(chrome.runtime?.lastError?.message || "Service worker connection closed."));
+      }
+    });
+
+    let finalResult: Record<string, unknown> | null = null;
+
+    port.onMessage.addListener((msg: {
+      type?: string;
+      eventType?: string;
+      payload?: Record<string, unknown>;
+      result?: Record<string, unknown>;
+      error?: { message?: string; code?: string };
+    }) => {
+      if (msg.type === "EVENT" && msg.eventType && msg.payload) {
+        const { eventType, payload } = msg;
+        if (eventType === "progress" && typeof payload.stage === "string") {
+          onProgress?.({
+            stage: payload.stage,
+            label: STAGE_LABELS[payload.stage] || payload.stage,
+            data: payload
+          });
+        } else if (
+          ["classifying", "classified", "searching", "retrieving", "retrieved", "solving", "verifying"].includes(eventType)
+        ) {
+          onProgress?.({
+            stage: eventType,
+            label: STAGE_LABELS[eventType] || eventType,
+            data: payload
+          });
+        } else if (eventType === "partial") {
+          onProgress?.({
+            stage: "partial",
+            label: "Streaming intermediate reasoning...",
+            data: payload
+          });
+        } else if (eventType === "error") {
+          cleanup();
+          const err = new Error(
+            String(payload.message || payload.error || "Streaming analysis failed.")
+          ) as Error & { code?: string };
+          err.code = typeof payload.code === "string" ? payload.code : undefined;
+          reject(err);
+        } else if (eventType === "done") {
+          finalResult =
+            payload.response && typeof payload.response === "object"
+              ? (payload.response as Record<string, unknown>)
+              : payload;
+        }
+      } else if (msg.type === "COMPLETE") {
+        const result = msg.result || finalResult;
+        cleanup();
+        if (result) {
+          resolve(result);
+        } else {
+          reject(new Error("Stream ended before a final result was received."));
+        }
+      } else if (msg.type === "ERROR") {
+        cleanup();
+        const err = new Error(msg.error?.message || "Streaming analysis failed.") as Error & { code?: string };
+        err.code = msg.error?.code;
+        reject(err);
+      }
+    });
+
+    port.postMessage({
+      type: "START_STREAM",
+      request,
+      apiBase,
+      localUserId
+    });
+  });
+}
+
+export async function streamAssessmentAnalysis({
+  request,
+  apiBase,
+  localUserId,
+  signal,
+  onProgress
+}: {
+  request: AssessmentAnalyzeRequest;
+  apiBase: string;
+  localUserId: string;
+  signal?: AbortSignal;
+  onProgress?: (update: StreamProgressUpdate) => void;
+}): Promise<Record<string, unknown>> {
+  const validated = AssessmentAnalyzeRequestSchema.parse(request);
+
+  if (isExtensionContextAlive() && typeof chrome.runtime?.connect === "function") {
+    try {
+      return await streamViaServiceWorker({
+        request: validated,
+        apiBase,
+        localUserId,
+        signal,
+        onProgress
+      });
+    } catch (swErr) {
+      if (signal?.aborted) throw swErr;
+    }
+  }
+
+  return directStreamAssessmentAnalysis({
+    request: validated,
+    apiBase,
+    localUserId,
+    signal,
+    onProgress
+  });
 }
 
 export async function requestCodingAnalysis(

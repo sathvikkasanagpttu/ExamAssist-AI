@@ -164,6 +164,14 @@ export function isOriginAllowed(origin, env = process.env) {
   return false;
 }
 
+// Support Chrome Private Network Access (PNA)
+app.use((req, res, next) => {
+  if (req.headers["access-control-request-private-network"]) {
+    res.setHeader("Access-Control-Allow-Private-Network", "true");
+  }
+  next();
+});
+
 app.use(cors({
   origin: (origin, callback) => {
     if (isOriginAllowed(origin)) {
