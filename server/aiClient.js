@@ -4,6 +4,7 @@
  * Does NOT generate canned, fake, or fallback answers.
  */
 
+import "./env.js";
 import OpenAI from "openai";
 import { createHash } from "crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
