@@ -656,6 +656,8 @@ function InPageOverlayApp(props: OverlayProps) {
                     ? "Analysis Cancelled"
                     : errorState.code === "AI_NOT_CONFIGURED"
                     ? "⚠️ AI Key Not Configured"
+                    : errorState.code === "AI_RATE_LIMITED"
+                    ? "⚠️ API Credits / Quota Exhausted"
                     : errorState.code === "CONNECTION_FAILED"
                     ? "⚠️ Backend Offline"
                     : "Assessment Error"}

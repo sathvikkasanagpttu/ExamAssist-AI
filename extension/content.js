@@ -8852,7 +8852,7 @@ ${code}`.toLowerCase();
             streamStage
           ] }) }),
           errorState && /* @__PURE__ */ u$1("div", { id: "examai-error-banner", className: "examai-error", "data-error-code": errorState.code, children: [
-            /* @__PURE__ */ u$1("strong", { style: { display: "block", marginBottom: "4px" }, children: errorState.code === "CANCELLED" ? "Analysis Cancelled" : errorState.code === "AI_NOT_CONFIGURED" ? "⚠️ AI Key Not Configured" : errorState.code === "CONNECTION_FAILED" ? "⚠️ Backend Offline" : "Assessment Error" }),
+            /* @__PURE__ */ u$1("strong", { style: { display: "block", marginBottom: "4px" }, children: errorState.code === "CANCELLED" ? "Analysis Cancelled" : errorState.code === "AI_NOT_CONFIGURED" ? "⚠️ AI Key Not Configured" : errorState.code === "AI_RATE_LIMITED" ? "⚠️ API Credits / Quota Exhausted" : errorState.code === "CONNECTION_FAILED" ? "⚠️ Backend Offline" : "Assessment Error" }),
             /* @__PURE__ */ u$1("span", { children: errorState.message })
           ] }),
           result && /* @__PURE__ */ u$1("div", { id: "examai-result-card", className: "examai-card", children: [
